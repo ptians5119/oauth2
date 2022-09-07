@@ -26,7 +26,7 @@ pub struct RedisClusterScyllaCluster {
 
 
 impl RedisClusterScyllaCluster {
-    pub fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
+    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
 
         let client = {
             let mut builder = ClusterClientBuilder::new(redis_nodes);
@@ -95,18 +95,20 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             }
         };
         if &client_str == ""{
-            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris, scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.db_table, id);
-            if let Some(rows) = self.scylla_session.query(smt.clone(), &[]).await.map_err(|err|{
-                error!("failed to excute smt={} with err={:?}", smt, err);
-                anyhow::Error::from(err)
-            })?.rows {
-                for row in rows.into_typed::<StringfiedEncodedClient>() {
-                    let c = row?;
-                    let client = c.to_encoded_client()?;
-                    return Ok(client);
+            futures::executor::block_on(async {
+                let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris\
+                    , scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.db_table, id);
+                if let Some(rows) = self.scylla_session.query(smt.clone(), &[]).await.map_err(|err|{
+                    error!("failed to excute smt={} with err={:?}", smt, err);
+                    anyhow::Error::from(err)
+                })?.rows {
+                    for row in rows.into_typed::<StringfiedEncodedClient>() {
+                        let client = row?;
+                        return Ok(client.to_encoded_client()?)
+                    }
                 }
-            }
-            Err(anyhow::Error::msg("Not Found"))
+                Err(anyhow::Error::msg("Not Found"))
+            })
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
             Ok(stringfied_client.to_encoded_client()?)

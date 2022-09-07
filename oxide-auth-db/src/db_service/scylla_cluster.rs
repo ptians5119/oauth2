@@ -19,7 +19,7 @@ pub struct ScyllaClusterDataSource {
 
 
 impl ScyllaClusterDataSource {
-    pub fn new(nodes: Vec<&str>, username: &str, password: &str, db_name: &str, table_name: &str) -> anyhow::Result<Self> {
+    pub async fn new(nodes: Vec<&str>, username: &str, password: &str, db_name: &str, table_name: &str) -> anyhow::Result<Self> {
         let session = SessionBuilder::new()
             .known_nodes(&nodes)
             .user(username, password)
@@ -48,18 +48,20 @@ impl OauthClientDBRepository for ScyllaClusterDataSource {
     }
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
-        let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris, scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.db_table, id);
-        if let Some(rows) = self.session.query(smt.clone(), &[]).await.map_err(|err|{
-            error!("failed to excute smt={} with err={:?}", smt, err);
-            anyhow::Error::from(err)
-        })?.rows {
-            for row in rows.into_typed::<StringfiedEncodedClient>() {
-                let c = row?;
-                let client = c.to_encoded_client()?;
-                return Ok(client);
+        futures::executor::block_on(async {
+            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris\
+                    , scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.table_name, id);
+            if let Some(rows) = self.session.query(smt.clone(), &[]).await.map_err(|err|{
+                error!("failed to excute smt={} with err={:?}", smt, err);
+                anyhow::Error::from(err)
+            })?.rows {
+                for row in rows.into_typed::<StringfiedEncodedClient>() {
+                    let client = row?;
+                    return Ok(client.to_encoded_client()?)
+                }
             }
-        }
-        Err(anyhow::Error::msg("Not Found"))
+            Err(anyhow::Error::msg("Not Found"))
+        })
     }
 
     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {

@@ -24,8 +24,7 @@ reqwest = "0.10.10"
 log = "0.4"
 log4rs = "0.10.0"
 redis = { version = "0.20", features = ["r2d2", "cluster", "connection-manager", "tokio-comp"] }
-cdrs = { version = "2.3.3" }
-cdrs_helpers_derive = { version = "0.4" }
+scylla = "0.5.0"
 cfg-if = "1"
 
 [features]

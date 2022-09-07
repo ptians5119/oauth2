@@ -1,8 +1,5 @@
 use oxide_auth::primitives::prelude::Scope;
 use oxide_auth::primitives::registrar::{ClientType, EncodedClient, RegisteredUrl, ExactUrl};
-use cdrs::types::prelude::*;
-use cdrs::types::from_cdrs::FromCDRSByName;
-use cdrs::frame::IntoBytes;
 
 use std::str::FromStr;
 use std::borrow::Borrow;
@@ -12,7 +9,7 @@ use std::borrow::Borrow;
 ///
 /// This provides a standard encoding for `Registrars` who wish to store their clients and makes it
 /// possible to test password policies.
-#[derive(Clone, Debug, Serialize, Deserialize, IntoCDRSValue, TryFromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StringfiedEncodedClient {
     /// The id of this client. If this is was registered at a `Registrar`, this should be a key
     /// to the instance.

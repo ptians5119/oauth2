@@ -1,13 +1,9 @@
 use oxide_auth::primitives::registrar::EncodedClient;
 use redis::{Commands, RedisError, ErrorKind, Client, ConnectionInfo, ToRedisArgs};
-use cdrs::authenticators::StaticPasswordAuthenticator;
-use cdrs::cluster::session::{new as new_session, Session};
-use cdrs::cluster::{ClusterTcpConfig, NodeTcpConfigBuilder, TcpConnectionPool};
-use cdrs::load_balancing::RoundRobin;
-use cdrs::query::*;
-use cdrs::types::prelude::*;
-use cdrs::frame::IntoBytes;
-use cdrs::types::from_cdrs::FromCDRSByName;
+
+use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
+use scylla::transport::load_balancing::RoundRobinPolicy;
+use std::sync::Arc;
 
 use std::str::FromStr;
 use url::Url;
@@ -15,11 +11,9 @@ use url::Url;
 use crate::primitives::db_registrar::OauthClientDBRepository;
 use super::StringfiedEncodedClient;
 
-type CurrentSession = Session<RoundRobin<TcpConnectionPool<StaticPasswordAuthenticator>>>;
-
 /// redis datasource to Client entries.
 pub struct RedisIsolateScyllaCluster {
-    scylla_session: CurrentSession,
+    scylla_session: Session,
     redis_client: Client,
     redis_prefix: String,
     db_name: String,
@@ -42,17 +36,13 @@ impl RedisIsolateScyllaCluster {
             err
         })?;
 
-        let auth = StaticPasswordAuthenticator::new(db_user, db_pwd);
-        let mut configs = vec![];
-
-        for n in db_nodes {
-            let node = NodeTcpConfigBuilder::new(n, auth.clone()).build();
-            configs.push(node);
-        }
-        let session = new_session(&ClusterTcpConfig(configs), RoundRobin::new()).map_err(|err|{
-            error!("{}", err.to_string());
-            err
-        })?;
+        let session = SessionBuilder::new()
+            .known_nodes(&db_nodes)
+            .user(db_user, db_pwd)
+            .load_balancing(Arc::new(RoundRobinPolicy::new()))
+            .build()
+            .await
+            .unwrap();
 
         Ok(RedisIsolateScyllaCluster {
             scylla_session: session,
@@ -100,18 +90,18 @@ impl OauthClientDBRepository for RedisIsolateScyllaCluster {
             }
         };
         if &client_str == ""{
-            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris, scopes as default_scope FROM {}.{} where client_id = ?", self.db_name, self.db_table);
-            let r = self.scylla_session.query_with_values(smt, query_values!(id))?
-                .get_body()?
-                .into_rows().ok_or(anyhow::Error::msg("Record Not Found"))?;
-            if r.len() > 0 {
-                let b: StringfiedEncodedClient = StringfiedEncodedClient::try_from_row(r.get(0).unwrap().to_owned())?;
-                let client = b.to_encoded_client()?;
-                self.regist_to_cache(&b)?;
-                Ok(client)
-            } else {
-                Err(anyhow::Error::msg("Not Found"))
+            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris, scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.db_table, id);
+            if let Some(rows) = self.scylla_session.query(smt.clone(), &[]).await.map_err(|err|{
+                error!("failed to excute smt={} with err={:?}", smt, err);
+                anyhow::Error::from(err)
+            })?.rows {
+                for row in rows.into_typed::<StringfiedEncodedClient>() {
+                    let c = row?;
+                    let client = c.to_encoded_client()?;
+                    return Ok(client);
+                }
             }
+            Err(anyhow::Error::msg("Not Found"))
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
             Ok(stringfied_client.to_encoded_client()?)

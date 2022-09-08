@@ -15,6 +15,9 @@ pub struct StringfiedEncodedClient {
     /// to the instance.
     pub client_id: String,
 
+    /// client_secret, for authentication.
+    pub client_secret: Option<String>,
+
     /// The registered redirect uri.
     /// Unlike `additional_redirect_uris`, this is registered as the default redirect uri
     /// and will be replaced if, for example, no `redirect_uri` is specified in the request parameter.
@@ -26,9 +29,6 @@ pub struct StringfiedEncodedClient {
 
     /// The scope the client gets if none was given.
     pub default_scope: Option<String>,
-
-    /// client_secret, for authentication.
-    pub client_secret: Option<String>,
 }
 
 impl StringfiedEncodedClient {

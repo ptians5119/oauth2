@@ -32,7 +32,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: &str) -> Result<StringfiedEncodedClient, Error> {
+pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
     let handle = Handle::current();
     let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {

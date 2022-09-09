@@ -49,7 +49,7 @@ impl OauthClientDBRepository for ScyllaClusterDataSource {
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
         let session = self.session.clone();
-        let client = super::get_client(session, self.db_name.clone(), self.table_name.clone(), id)?;
+        let client = super::get_client(session, self.db_name.clone(), self.table_name.clone(), id.to_string())?;
         Ok(client.to_encoded_client()?)
     }
 

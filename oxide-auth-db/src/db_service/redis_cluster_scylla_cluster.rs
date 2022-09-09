@@ -97,7 +97,7 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
         };
         if &client_str == ""{
             let session = self.scylla_session.clone();
-            let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id)?;
+            let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string())?;
             Ok(client.to_encoded_client()?)
         }else{
             let client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

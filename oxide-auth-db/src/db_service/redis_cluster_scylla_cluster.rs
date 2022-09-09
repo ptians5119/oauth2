@@ -6,6 +6,7 @@ use redis::cluster::{ClusterClient as Client, ClusterClientBuilder};
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use std::str::FromStr;
 use url::Url;
@@ -17,7 +18,7 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 
 /// redis datasource to Client entries.
 pub struct RedisClusterScyllaCluster {
-    scylla_session: Session,
+    scylla_session: Arc<Mutex<Session>>,
     redis_client: Client,
     redis_prefix: String,
     db_name: String,
@@ -49,7 +50,7 @@ impl RedisClusterScyllaCluster {
             .unwrap();
 
         Ok(RedisClusterScyllaCluster {
-            scylla_session: session,
+            scylla_session: Arc::new(Mutex::new(session)),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
             db_name: db_name.to_string(),
@@ -95,23 +96,13 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             }
         };
         if &client_str == ""{
-            futures::executor::block_on(async {
-                let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris\
-                    , scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.db_table, id);
-                if let Some(rows) = self.scylla_session.query(smt.clone(), &[]).await.map_err(|err|{
-                    error!("failed to excute smt={} with err={:?}", smt, err);
-                    anyhow::Error::from(err)
-                })?.rows {
-                    for row in rows.into_typed::<StringfiedEncodedClient>() {
-                        let client = row?;
-                        return Ok(client.to_encoded_client()?)
-                    }
-                }
-                Err(anyhow::Error::msg("Not Found"))
-            })
+            let info = (self.db_name.clone(), self.db_table.clone(), id);
+            let session = self.scylla_session.clone();
+            let client = super::get_client(session, info)?;
+            Ok(client.to_encoded_client()?)
         }else{
-            let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
-            Ok(stringfied_client.to_encoded_client()?)
+            let client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;
+            Ok(client.to_encoded_client()?)
         }
     }
 

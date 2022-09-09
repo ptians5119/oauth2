@@ -2,6 +2,7 @@ use oxide_auth::primitives::registrar::EncodedClient;
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use std::str::FromStr;
 use std::time::Duration;
@@ -12,7 +13,7 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 
 
 pub struct ScyllaClusterDataSource {
-    session: Session,
+    session: Arc<Mutex<Session>>,
     db_name: String,
     table_name: String,
 }
@@ -29,14 +30,13 @@ impl ScyllaClusterDataSource {
             .unwrap();;
 
         Ok(ScyllaClusterDataSource {
-            session,
+            session: Arc::new(Mutex::new(session)),
             db_name: db_name.to_string(),
             table_name: table_name.to_string(),
         })
     }
 
     pub fn regist(&self, client: EncodedClient) -> anyhow::Result<()> {
-
         Ok(())
     }
 }
@@ -48,20 +48,10 @@ impl OauthClientDBRepository for ScyllaClusterDataSource {
     }
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
-        futures::executor::block_on(async {
-            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris\
-                    , scopes as default_scope FROM {}.{} where client_id = {}", self.db_name, self.table_name, id);
-            if let Some(rows) = self.session.query(smt.clone(), &[]).await.map_err(|err|{
-                error!("failed to excute smt={} with err={:?}", smt, err);
-                anyhow::Error::from(err)
-            })?.rows {
-                for row in rows.into_typed::<StringfiedEncodedClient>() {
-                    let client = row?;
-                    return Ok(client.to_encoded_client()?)
-                }
-            }
-            Err(anyhow::Error::msg("Not Found"))
-        })
+        let info = (self.db_name.clone(), self.table_name.clone(), id);
+        let session = self.session.clone();
+        let client = super::get_client(session, info)?;
+        Ok(client.to_encoded_client()?)
     }
 
     fn regist_from_encoded_client(&self, client: EncodedClient) -> anyhow::Result<()> {

@@ -38,7 +38,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, info: (String, String, &str)) ->
     let th = thread::spawn(move || {
         handle.spawn(async move {
             let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
-                    , scopes as default_scope FROM {}.{} where client_id = '{}'", info.0, info.1, info.2);
+                    , scopes as default_scope FROM {}.{} where client_id = '{}'", info.0.to_owned(), info.1.to_owned(), info.2.to_owned());
             let res = match session.lock().await.query(smt.clone(), &[]).await {
                 Ok(r) => r,
                 Err(e) => {

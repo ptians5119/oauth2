@@ -37,8 +37,8 @@ pub fn get_client(session: Arc<Mutex<Session>>, info: (String, String, &str)) ->
     let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {
         handle.spawn(async move {
-            let smt = r#"SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
-                    , scopes as default_scope FROM xbot.apps where client_id = '380235020360617984'"#;
+            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
+                    , scopes as default_scope FROM {}.{} where client_id = '{}'", info.0, info.1, info.2);
             let res = match session.lock().await.query(smt.clone(), &[]).await {
                 Ok(r) => r,
                 Err(e) => {

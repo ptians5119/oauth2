@@ -39,7 +39,7 @@ impl ScyllaHandler {
                                     session.clone(),
                                     db_name.as_str(),
                                     db_table.as_str(),
-                                    client_id.as_str())
+                                    msg.as_str())
                                     .await.map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
                                 tx2.send(client).unwrap();
                             }

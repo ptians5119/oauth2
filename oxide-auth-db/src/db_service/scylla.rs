@@ -61,7 +61,13 @@ impl ScyllaHandler {
     pub fn get_app(&self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
-        self.output.clone().recv().map_err(|err| { println!("222"); Error::new(ErrorKind::NotFound, err.to_string() }))
+        match self.output.clone().recv() {
+            Ok(c) => Ok(c),
+            Err(err) => {
+                println!("222");s
+                Err(Error::new(ErrorKind::NotFound, err.to_string()))
+            }
+        }
     }
 
     pub fn stop(&self)

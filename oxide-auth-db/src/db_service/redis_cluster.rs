@@ -6,7 +6,7 @@ use url::Url;
 use std::str::FromStr;
 use std::time::Duration;
 
-use super::StringfiedEncodedClient;
+use super::client_data::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;
 
 

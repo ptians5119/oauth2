@@ -5,7 +5,7 @@ use url::Url;
 use std::str::FromStr;
 
 use crate::primitives::db_registrar::OauthClientDBRepository;
-use super::StringfiedEncodedClient;
+use super::client_data::StringfiedEncodedClient;
 
 
 /// redis datasource to Client entries.

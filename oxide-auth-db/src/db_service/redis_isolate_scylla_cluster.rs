@@ -1,22 +1,25 @@
 use oxide_auth::primitives::registrar::EncodedClient;
-use redis::{Commands, RedisError, Client, ConnectionInfo, ToRedisArgs};
+use redis::{Commands, RedisError, ErrorKind, Client, ConnectionInfo, ToRedisArgs};
 
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
-use std::sync::Arc;
+use std::sync::{Arc};
 use tokio::sync::Mutex;
-use std::io::{Error, ErrorKind};
+
 use std::str::FromStr;
 use url::Url;
 
 use crate::primitives::db_registrar::OauthClientDBRepository;
-use super::StringfiedEncodedClient;
+use super::client_data::StringfiedEncodedClient;
 
 /// redis datasource to Client entries.
 pub struct RedisIsolateScyllaCluster {
-    scylla_session: Arc<Mutex<Session>>,
+    // scylla_session: Arc<Mutex<Session>>,
     redis_client: Client,
     redis_prefix: String,
+    db_nodes: Vec<String>,
+    db_user: String,
+    db_pwd: String,
     db_name: String,
     db_table: String,
 }
@@ -46,9 +49,12 @@ impl RedisIsolateScyllaCluster {
             .unwrap();
 
         Ok(RedisIsolateScyllaCluster {
-            scylla_session: Arc::new(Mutex::new(session)),
+            // scylla_session: Arc::new(Mutex::new(session)),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
+            db_nodes: db_nodes.iter().map(|x| x.to_string()).collect(),
+            db_user: db_user.to_string(),
+            db_pwd: db_pwd.to_string(),
             db_name: db_name.to_string(),
             db_table: db_table.to_string(),
         })
@@ -91,10 +97,26 @@ impl OauthClientDBRepository for RedisIsolateScyllaCluster {
             }
         };
         if &client_str == ""{
-            let session = self.scylla_session.clone();
-            let rx = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string());
-            let client = rx.recv()
-                .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))??;
+            let (tx, rx) = std::sync::mpsc::channel();
+            let nodes = self.db_nodes.clone();
+            let user = self.db_user.clone();
+            let pwd = self.db_pwd.clone();
+            let db = self.db_name.clone();
+            let table = self.db_table.clone();
+            let id = id.to_string();
+            let th = std::thread::spawn(move || {
+                let client = super::scylla::handle(
+                    nodes,
+                    user,
+                    pwd,
+                    db,
+                    table,
+                    id
+                );
+                let _ = tx.send(client);
+            });
+            let _ = th.join();
+            let client = rx.recv()??;
             Ok(client.to_encoded_client()?)
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

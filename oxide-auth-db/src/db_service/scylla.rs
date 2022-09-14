@@ -1,9 +1,67 @@
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use scylla::transport::errors::NewSessionError;
 use super::client_data::StringfiedEncodedClient;
 use std::io::{Error, ErrorKind};
+use std::thread;
+
+pub(crate) struct ScyllaHandler {
+    handle: thread::JoinHandle<()>,
+    input: mpsc::Sender<String>,
+    output: Arc<mpsc::Receiver<StringfiedEncodedClient>>,
+    db_name: String,
+    db_table: String,
+}
+
+impl ScyllaHandler {
+    pub fn new(db_nodes: Vec<String>, db_user: String, db_pwd: String, db_name: String, db_table: String) -> Self
+    {
+        let (tx1, rx1) = mpsc::channel::<String>();
+        let (tx2, rx2) = mpsc::channel();
+        let th = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build().unwrap();
+
+            rt.block_on(async {
+                let session = get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
+                    Error::new(ErrorKind::Other, format!("{:?}", e)))?;
+                let session = Arc::new(session);
+                loop {
+                    if let Ok(client_id) = rx1.recv() {
+                        let client = get_app(
+                            session.clone(),
+                            db_name.as_str(),
+                            db_table.as_str(),
+                            client_id.as_str())
+                            .await.map_err(|err| Error::new(ErrorKind::Other, err.to_string())).unwrap();
+                        tx2.send(client).unwrap();
+                    }
+                }
+            });
+        });
+        ScyllaHandler {
+            handle: th,
+            input: tx1,
+            output: Arc::new(rx2),
+            db_name,
+            db_table
+        }
+    }
+
+    pub fn get_app(self, id: &str) -> Result<StringfiedEncodedClient, Error>
+    {
+        self.input.send(id.to_string())?;
+        self.output.recv().map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))
+    }
+}
+
+impl Drop for ScyllaHandler {
+    fn drop(&mut self) {
+        let _ = self.handle.join();
+    }
+}
 
 async fn get_session(db_nodes: &Vec<String>, db_user: &str, db_pwd: &str) -> Result<Session, NewSessionError>
 {
@@ -15,7 +73,7 @@ async fn get_session(db_nodes: &Vec<String>, db_user: &str, db_pwd: &str) -> Res
         .await
 }
 
-async fn get_app(session: Session, db_name: &str, db_table: &str, client_id: &str) -> Result<StringfiedEncodedClient, Error>
+async fn get_app(session: Arc<Session>, db_name: &str, db_table: &str, client_id: &str) -> Result<StringfiedEncodedClient, Error>
 {
     let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, db_table, client_id);
@@ -40,19 +98,4 @@ async fn get_app(session: Session, db_name: &str, db_table: &str, client_id: &st
         return Ok(client)
     }
     Err(Error::new(ErrorKind::NotFound, "no rows"))
-}
-
-pub(crate) fn handle(db_nodes: Vec<String>, db_user: String, db_pwd: String, db_name: String, db_table: String, id: String) -> Result<StringfiedEncodedClient, Error>
-{
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build().unwrap();
-
-    let res = rt.block_on(async {
-        let session = get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
-            Error::new(ErrorKind::Other, format!("{:?}", e)))?;
-        get_app(session, db_name.as_str(), db_table.as_str(), id.as_str()).await
-    });
-
-    res
 }

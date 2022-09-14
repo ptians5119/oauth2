@@ -28,8 +28,9 @@ impl ScyllaHandler {
                 let session = get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
                     Error::new(ErrorKind::Other, format!("{:?}", e)))?;
                 let session = Arc::new(session);
+                let rx = Arc::new(rx1);
                 loop {
-                    match rx1.recv() {
+                    match rx.clone().recv() {
                         Ok(msg) => {
                             if msg.eq("stop") {
                                 break

@@ -1,6 +1,7 @@
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::{Arc, mpsc};
+use std::rc::Rc;
 use scylla::transport::errors::NewSessionError;
 use super::client_data::StringfiedEncodedClient;
 use std::io::{Error, ErrorKind};
@@ -9,7 +10,7 @@ use std::thread;
 pub(crate) struct ScyllaHandler {
     handle: Option<thread::JoinHandle<()>>,
     input: mpsc::Sender<String>,
-    output: Arc<mpsc::Receiver<StringfiedEncodedClient>>,
+    output: Rc<mpsc::Receiver<StringfiedEncodedClient>>,
 }
 
 impl ScyllaHandler {
@@ -25,8 +26,8 @@ impl ScyllaHandler {
             let _ = rt.block_on(async {
                 let session = ScyllaHandler::get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
                     Error::new(ErrorKind::Other, format!("{:?}", e)))?;
-                let session = Arc::new(session);
-                let rx = Arc::new(rx1);
+                let session = Rc::new(session);
+                let rx = Rc::new(rx1);
                 loop {
                     match rx.clone().recv() {
                         Ok(msg) => {
@@ -54,14 +55,14 @@ impl ScyllaHandler {
         ScyllaHandler {
             handle: Some(th),
             input: tx1,
-            output: Arc::new(rx2),
+            output: Rc::new(rx2),
         }
     }
 
     pub fn get_app(&self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
-        match self.output.clone().recv() {
+        match self.output.recv() {
             Ok(c) => Ok(c),
             Err(err) => {
                 println!("222");
@@ -85,7 +86,7 @@ impl ScyllaHandler {
             .await
     }
 
-    async fn get_app_by_db(session: Arc<Session>, db_name: &str, db_table: &str, client_id: &str) -> Result<StringfiedEncodedClient, Error>
+    async fn get_app_by_db(session: Rc<Session>, db_name: &str, db_table: &str, client_id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, db_table, client_id);

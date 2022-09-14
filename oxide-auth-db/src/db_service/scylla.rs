@@ -1,6 +1,6 @@
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, mpsc, Mutex};
 use std::rc::Rc;
 use scylla::transport::errors::NewSessionError;
 use super::client_data::StringfiedEncodedClient;
@@ -10,7 +10,7 @@ use std::thread;
 pub(crate) struct ScyllaHandler {
     handle: Option<thread::JoinHandle<()>>,
     input: mpsc::Sender<String>,
-    output: Rc<mpsc::Receiver<StringfiedEncodedClient>>,
+    output: Arc<Mutex<mpsc::Receiver<StringfiedEncodedClient>>>,
 }
 
 impl ScyllaHandler {
@@ -18,6 +18,7 @@ impl ScyllaHandler {
     {
         let (tx1, rx1) = mpsc::channel::<String>();
         let (tx2, rx2) = mpsc::channel();
+        let rx = Arc::new(Mutex::new(rx1));
         let th = thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -27,9 +28,8 @@ impl ScyllaHandler {
                 let session = ScyllaHandler::get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
                     Error::new(ErrorKind::Other, format!("{:?}", e)))?;
                 let session = Rc::new(session);
-                let rx = Rc::new(rx1);
                 loop {
-                    match rx.clone().recv() {
+                    match rx.clone().lock().unwrap().recv() {
                         Ok(msg) => {
                             if msg.eq("stop") {
                                 break
@@ -55,14 +55,14 @@ impl ScyllaHandler {
         ScyllaHandler {
             handle: Some(th),
             input: tx1,
-            output: Rc::new(rx2),
+            output: Arc::new(Mutex::new(rx2)),
         }
     }
 
     pub fn get_app(&self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
-        match self.output.recv() {
+        match self.output.clone().lock().unwrap().recv() {
             Ok(c) => Ok(c),
             Err(err) => {
                 println!("222");

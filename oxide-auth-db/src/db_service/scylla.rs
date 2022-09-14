@@ -7,7 +7,7 @@ use std::io::{Error, ErrorKind};
 use std::thread;
 
 pub(crate) struct ScyllaHandler {
-    handle: thread::JoinHandle<()>,
+    handle: Option<thread::JoinHandle<()>>,
     input: mpsc::Sender<String>,
     output: Arc<mpsc::Receiver<StringfiedEncodedClient>>,
 }
@@ -49,13 +49,13 @@ impl ScyllaHandler {
             });
         });
         ScyllaHandler {
-            handle: th,
+            handle: Some(th),
             input: tx1,
             output: Arc::new(rx2),
         }
     }
 
-    pub fn get_app(self, id: &str) -> Result<StringfiedEncodedClient, Error>
+    pub fn get_app(&self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
         self.output.recv().map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))
@@ -106,6 +106,9 @@ impl ScyllaHandler {
 
 impl Drop for ScyllaHandler {
     fn drop(&mut self) {
-        let _ = self.handle.join();
+        self.stop();
+        if let Some(th) = self.handle.take() {
+            let _ = th.join();
+        }
     }
 }

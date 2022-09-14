@@ -64,7 +64,7 @@ impl ScyllaHandler {
         match self.output.clone().recv() {
             Ok(c) => Ok(c),
             Err(err) => {
-                println!("222");s
+                println!("222");
                 Err(Error::new(ErrorKind::NotFound, err.to_string()))
             }
         }

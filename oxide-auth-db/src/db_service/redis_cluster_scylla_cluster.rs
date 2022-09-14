@@ -67,7 +67,12 @@ impl RedisClusterScyllaCluster {
         connect.del(&(self.redis_prefix.to_owned() + client_id))?;
         Ok(())
     }
+}
 
+impl Drop for RedisClusterScyllaCluster {
+    fn drop(&mut self) {
+        let _ = self.scylla_session.stop();
+    }
 }
 
 impl OauthClientDBRepository for RedisClusterScyllaCluster {

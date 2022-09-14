@@ -24,21 +24,29 @@ impl ScyllaHandler {
                 .enable_all()
                 .build().unwrap();
 
-            rt.block_on(async {
+            let _ = rt.block_on(async {
                 let session = get_session(&db_nodes, db_user.as_str(), db_pwd.as_str()).await.map_err(|e|
                     Error::new(ErrorKind::Other, format!("{:?}", e)))?;
                 let session = Arc::new(session);
                 loop {
-                    if let Ok(client_id) = rx1.recv() {
-                        let client = get_app(
-                            session.clone(),
-                            db_name.as_str(),
-                            db_table.as_str(),
-                            client_id.as_str())
-                            .await.map_err(|err| Error::new(ErrorKind::Other, err.to_string())).unwrap();
-                        tx2.send(client).unwrap();
+                    match rx1.recv() {
+                        Ok(msg) => {
+                            if msg.eq("stop") {
+                                break
+                            } else {
+                                let client = get_app(
+                                    session.clone(),
+                                    db_name.as_str(),
+                                    db_table.as_str(),
+                                    client_id.as_str())
+                                    .await.map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
+                                tx2.send(client).unwrap();
+                            }
+                        }
+                        Err(err) => Err(Error::new(ErrorKind::Other, err.to_string()))
                     }
                 }
+                Ok(())
             });
         });
         ScyllaHandler {
@@ -52,8 +60,13 @@ impl ScyllaHandler {
 
     pub fn get_app(self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
-        self.input.send(id.to_string())?;
+        self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
         self.output.recv().map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))
+    }
+
+    pub fn stop(self)
+    {
+        let _ = self.input.send("stop".to_string());
     }
 }
 

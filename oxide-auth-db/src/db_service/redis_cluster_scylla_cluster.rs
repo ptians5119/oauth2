@@ -7,15 +7,13 @@ use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::{Arc};
 use tokio::sync::Mutex;
-use super::scylla::ScyllaHandler;
+use super::my_scylla::ScyllaHandler;
 
 use std::str::FromStr;
 use url::Url;
 
 use super::client_data::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;
-
-// type CurrentSession = Session<RoundRobin<TcpConnectionPool<StaticPasswordAuthenticator>>>;
 
 /// redis datasource to Client entries.
 pub struct RedisClusterScyllaCluster {

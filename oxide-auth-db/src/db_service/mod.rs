@@ -5,7 +5,7 @@ mod redis_cluster;
 mod scylla_cluster;
 mod redis_isolate_scylla_cluster;
 mod redis_cluster_scylla_cluster;
-mod scylla;
+mod my_scylla;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "redis-isolate")] {

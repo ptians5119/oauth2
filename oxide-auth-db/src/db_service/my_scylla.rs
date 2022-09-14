@@ -10,7 +10,7 @@ use std::thread;
 pub(crate) struct ScyllaHandler {
     handle: Option<thread::JoinHandle<()>>,
     input: mpsc::Sender<String>,
-    output: Arc<Mutex<mpsc::Receiver<StringfiedEncodedClient>>>,
+    output: Arc<mpsc::Receiver<StringfiedEncodedClient>>,
 }
 
 impl ScyllaHandler {
@@ -55,15 +55,14 @@ impl ScyllaHandler {
         ScyllaHandler {
             handle: Some(th),
             input: tx1,
-            output: Arc::new(Mutex::new(rx2)),
+            output: Arc::new(rx2),
         }
     }
 
     pub fn get_app(&self, id: &str) -> Result<StringfiedEncodedClient, Error>
     {
         self.input.send(id.to_string()).map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))?;
-        let output = self.output.clone();
-        match output.clone().lock().unwrap().recv() {
+        match self.output.clone().recv() {
             Ok(c) => Ok(c),
             Err(err) => {
                 println!("222");

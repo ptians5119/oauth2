@@ -3,7 +3,7 @@ use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::{Arc};
 use tokio::sync::Mutex;
-use super::scylla::ScyllaHandler;
+use super::my_scylla::ScyllaHandler;
 use std::str::FromStr;
 use std::time::Duration;
 use std::borrow::Borrow;

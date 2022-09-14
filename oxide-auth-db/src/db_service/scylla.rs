@@ -64,7 +64,7 @@ impl ScyllaHandler {
         self.output.recv().map_err(|err| Error::new(ErrorKind::NotFound, err.to_string()))
     }
 
-    pub fn stop(self)
+    pub fn stop(&self)
     {
         let _ = self.input.send("stop".to_string());
     }

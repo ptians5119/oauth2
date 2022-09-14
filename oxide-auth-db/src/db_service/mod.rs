@@ -32,7 +32,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
+pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> mpsc::Receiver<Result<StringfiedEncodedClient, Error>> {
     let handle = Handle::current();
     let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {
@@ -61,10 +61,6 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
             tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
         });
     });
-    let client = match rx.recv() {
-        Ok(c) => c,
-        Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-    };
     th.join().unwrap();
-    client
+    rx
 }

@@ -1,11 +1,11 @@
 use oxide_auth::primitives::registrar::EncodedClient;
-use redis::{Commands, RedisError, ErrorKind, Client, ConnectionInfo, ToRedisArgs};
+use redis::{Commands, RedisError, Client, ConnectionInfo, ToRedisArgs};
 
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
+use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 use url::Url;
 
@@ -92,7 +92,9 @@ impl OauthClientDBRepository for RedisIsolateScyllaCluster {
         };
         if &client_str == ""{
             let session = self.scylla_session.clone();
-            let client = super::get_client(session, self.db_name.clone(), self.db_table.clone(), id.to_string())?;
+            let rx = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string());
+            let client = rx.recv()
+                .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))??;
             Ok(client.to_encoded_client()?)
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

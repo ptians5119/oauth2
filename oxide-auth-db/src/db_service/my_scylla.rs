@@ -18,7 +18,7 @@ impl ScyllaHandler {
     {
         let (tx1, rx1) = mpsc::channel::<String>();
         let (tx2, rx2) = mpsc::channel();
-        let tx = Arc::new(tx2);
+        let tx = Arc::new(Mutex::new(tx2));
         let rx = Arc::new(Mutex::new(rx1));
         let th = thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -41,7 +41,7 @@ impl ScyllaHandler {
                                     db_table.clone().as_str(),
                                     msg.as_str())
                                     .await.map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
-                                tx.send(client).unwrap();
+                                tx.lock().unwrap().send(client).unwrap();
                             }
                         }
                         Err(err) => {

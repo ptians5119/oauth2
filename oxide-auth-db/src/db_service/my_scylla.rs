@@ -7,7 +7,7 @@ use super::client_data::StringfiedEncodedClient;
 use std::io::{Error, ErrorKind};
 use std::thread;
 
-pub(crate) struct ScyllaHandler {
+pub struct ScyllaHandler {
     handle: Option<thread::JoinHandle<()>>,
     input: mpsc::Sender<String>,
     output: Arc<mpsc::Receiver<StringfiedEncodedClient>>,

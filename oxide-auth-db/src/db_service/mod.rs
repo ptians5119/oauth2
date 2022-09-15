@@ -63,10 +63,12 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
             tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
         });
     });
+    let client = match rx.recv_timeout(Duration::from_millis(100)) {
+        Ok(c) => c,
+        Err(err) => Err(Error::new(ErrorKind::NotFound, err.to_string()))
+    };
     th.join().unwrap();
-    if let Ok(c) = rx.recv_timeout(Duration::from_millis(20)) {
-        return c
-    }
+    client
     // let rx = Arc::new(rx);
     // for _i in 0..3 {
     //     debug!("input try_recv");
@@ -74,5 +76,4 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
     //         return c
     //     }
     // }
-    Err(Error::new(ErrorKind::NotFound, "try recv error"))
 }

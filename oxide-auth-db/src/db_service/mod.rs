@@ -1,4 +1,4 @@
-mod client_data;
+pub mod client_data;
 
 mod redis_isolate;
 mod redis_cluster;

@@ -50,7 +50,7 @@ impl ScyllaHandler {
         let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", self.db_name, self.db_table, client_id);
         let res = {
-            match session.query(smt.clone(), &[]).await {
+            match self.session.query(smt.clone(), &[]).await {
                 Ok(r) => {
                     r
                 },

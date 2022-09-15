@@ -4,7 +4,15 @@ mod redis_cluster;
 mod scylla_cluster;
 mod redis_isolate_scylla_cluster;
 mod redis_cluster_scylla_cluster;
-pub mod my_scylla;
+
+use client_data::*;
+use std::io::{Error, ErrorKind};
+use scylla::{SessionBuilder, FromRow, Session, IntoTypedRows};
+use std::{sync::Arc, thread, time::Duration};
+use tokio::runtime::Handle;
+use tokio::sync::{Mutex, oneshot};
+use tokio::time::sleep;
+use futures::executor::block_on;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "redis-isolate")] {
@@ -23,4 +31,44 @@ cfg_if::cfg_if! {
         use redis_cluster_scylla_cluster::RedisClusterScyllaCluster;
         pub type DataSource = RedisClusterScyllaCluster;
     }
+}
+
+pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
+    let handle = Handle::current();
+    let (tx, rx) = oneshot::channel();
+    let th = thread::spawn(move || {
+        handle.spawn(async move {
+            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
+                    , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
+            let res = match session.lock().await.query(smt.clone(), &[]).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tx.send(Err(Error::new(ErrorKind::Other, format!("{:?}", e)))).unwrap();
+                    return
+                }
+            };
+            for row in res.rows.unwrap()
+                .into_typed::<StringfiedEncodedClient>() {
+                let client = match row {
+                    Ok(r) => r,
+                    Err(_e) => {
+                        tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
+                        return
+                    }
+                };
+                tx.send(Ok(client)).unwrap();
+                return
+            }
+            tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
+        });
+    });
+    th.join().unwrap();
+    let client = block_on(async {
+        sleep(Duration::from_millis(10)).await;
+        match rx.await {
+            Ok(c) => c,
+            Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+        }
+    });
+    client
 }

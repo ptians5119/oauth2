@@ -64,12 +64,15 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
         });
     });
     th.join().unwrap();
-    let rx = Arc::new(rx);
-    for _i in 0..3 {
-        debug!("input try_recv");
-        if let Ok(c) = rx.try_recv() {
-            return c
-        }
+    if let Ok(c) = rx.try_recv() {
+        return c
     }
+    // let rx = Arc::new(rx);
+    // for _i in 0..3 {
+    //     debug!("input try_recv");
+    //     if let Ok(c) = rx.try_recv() {
+    //         return c
+    //     }
+    // }
     Err(Error::new(ErrorKind::NotFound, "try recv error"))
 }

@@ -3,8 +3,7 @@ use redis::{Commands, RedisError, ErrorKind, Client, ConnectionInfo, ToRedisArgs
 
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
-use std::sync::{Arc};
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use super::my_scylla::ScyllaHandler;
 use std::str::FromStr;
 use url::Url;
@@ -14,14 +13,14 @@ use super::client_data::StringfiedEncodedClient;
 
 /// redis datasource to Client entries.
 pub struct RedisIsolateScyllaCluster {
-    scylla_session: ScyllaHandler,
+    scylla_session: Arc<Mutex<ScyllaHandler>>,
     redis_client: Client,
     redis_prefix: String,
 }
 
 
 impl RedisIsolateScyllaCluster {
-    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
+    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, scylla: Arc<Mutex<ScyllaHandler>>) -> anyhow::Result<Self> {
         let mut info = ConnectionInfo::from_str(redis_nodes[0]).map_err(|err|{
             error!("{}", err.to_string());
             err
@@ -35,16 +34,8 @@ impl RedisIsolateScyllaCluster {
             err
         })?;
 
-        let session = ScyllaHandler::new(
-            db_nodes.iter().map(|x| x.to_string()).collect(),
-            db_user.to_string(),
-            db_pwd.to_string(),
-            db_name.to_string(),
-            db_table.to_string(),
-        );
-
         Ok(RedisIsolateScyllaCluster {
-            scylla_session: session,
+            scylla_session: scylla,
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
         })
@@ -87,7 +78,7 @@ impl OauthClientDBRepository for RedisIsolateScyllaCluster {
             }
         };
         if &client_str == ""{
-            let client = self.scylla_session.get_app(id)?;
+            let client = self.scylla_session.lock().unwrap().get_app(id)?;
             Ok(client.to_encoded_client()?)
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

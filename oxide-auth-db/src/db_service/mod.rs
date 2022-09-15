@@ -1,11 +1,10 @@
-pub mod client_data;
-
+mod client_data;
 mod redis_isolate;
 mod redis_cluster;
 mod scylla_cluster;
 mod redis_isolate_scylla_cluster;
 mod redis_cluster_scylla_cluster;
-mod my_scylla;
+pub mod my_scylla;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "redis-isolate")] {

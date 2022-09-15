@@ -8,9 +8,9 @@ mod redis_cluster_scylla_cluster;
 use client_data::*;
 use std::io::{Error, ErrorKind};
 use scylla::{SessionBuilder, FromRow, Session, IntoTypedRows};
-use std::{sync::Arc, thread, time::Duration};
+use std::{sync::{Arc, mpsc}, thread, time::Duration};
 use tokio::runtime::Handle;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 use futures::executor::block_on;
 
@@ -35,7 +35,7 @@ cfg_if::cfg_if! {
 
 pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
     let handle = Handle::current();
-    let (tx, mut rx) = oneshot::channel();
+    let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {
         handle.spawn(async move {
             let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
@@ -64,14 +64,12 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
         });
     });
     th.join().unwrap();
-    let client = block_on(async {
-        for _i in 0..3 {
-            debug!("input try_recv");
-            if let Ok(c) = rx.try_recv() {
-                return c
-            }
+    let rx = Arc::new(rx);
+    for _i in 0..3 {
+        debug!("input try_recv");
+        if let Ok(c) = rx.try_recv() {
+            return c
         }
-        Err(Error::new(ErrorKind::NotFound, "try recv error"))
-    });
-    client
+    }
+    Err(Error::new(ErrorKind::NotFound, "try recv error"))
 }

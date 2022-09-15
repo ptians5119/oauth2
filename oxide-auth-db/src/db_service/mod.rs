@@ -35,41 +35,42 @@ cfg_if::cfg_if! {
 
 pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
     let handle = Handle::current();
-    let (tx, rx) = oneshot::channel();
-    {
-        let th = thread::spawn(move || {
-            handle.spawn(async move {
-                let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
+    let (tx, mut rx) = oneshot::channel();
+    let th = thread::spawn(move || {
+        handle.spawn(async move {
+            let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
-                let res = match session.lock().await.query(smt.clone(), &[]).await {
+            let res = match session.lock().await.query(smt.clone(), &[]).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tx.send(Err(Error::new(ErrorKind::Other, format!("{:?}", e)))).unwrap();
+                    return
+                }
+            };
+            for row in res.rows.unwrap()
+                .into_typed::<StringfiedEncodedClient>() {
+                let client = match row {
                     Ok(r) => r,
-                    Err(e) => {
-                        tx.send(Err(Error::new(ErrorKind::Other, format!("{:?}", e)))).unwrap();
-                        return;
+                    Err(_e) => {
+                        tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
+                        return
                     }
                 };
-                for row in res.rows.unwrap()
-                    .into_typed::<StringfiedEncodedClient>() {
-                    let client = match row {
-                        Ok(r) => r,
-                        Err(_e) => {
-                            tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
-                            return;
-                        }
-                    };
-                    tx.send(Ok(client)).unwrap();
-                    return;
-                }
-                tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
-            });
+                tx.send(Ok(client)).unwrap();
+                return
+            }
+            tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
         });
-        th.join().unwrap();
-    }
+    });
+    th.join().unwrap();
     let client = block_on(async {
-        match rx.await {
-            Ok(c) => c,
-            Err(e) => Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
+        for _i in 0..3 {
+            println!("input try_recv");
+            if let Ok(c) = rx.try_recv() {
+                return c
+            }
         }
+        Err(Error::new(ErrorKind::NotFound, "try recv error"))
     });
     client
 }

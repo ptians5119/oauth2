@@ -37,14 +37,6 @@ impl RedisClusterScyllaCluster {
             client
         };
 
-        let session = ScyllaHandler::new(
-            db_nodes.iter().map(|x| x.to_string()).collect(),
-            db_user.to_string(),
-            db_pwd.to_string(),
-            db_name.to_string(),
-            db_table.to_string(),
-        );
-
         Ok(RedisClusterScyllaCluster {
             scylla_session: scylla,
             redis_client: client,

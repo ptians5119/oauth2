@@ -56,6 +56,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                         return
                     }
                 };
+                debug!("get client");
                 tx.send(Ok(client)).unwrap();
                 return
             }
@@ -65,7 +66,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
     th.join().unwrap();
     let client = block_on(async {
         for _i in 0..3 {
-            println!("input try_recv");
+            debug!("input try_recv");
             if let Ok(c) = rx.try_recv() {
                 return c
             }

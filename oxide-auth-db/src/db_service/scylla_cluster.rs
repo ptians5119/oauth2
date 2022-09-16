@@ -13,7 +13,6 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 
 
 pub struct ScyllaClusterDataSource {
-    // session: Arc<Mutex<Session>>,
     db_nodes: Vec<String>,
     db_user: String,
     db_pwd: String,
@@ -23,17 +22,8 @@ pub struct ScyllaClusterDataSource {
 
 
 impl ScyllaClusterDataSource {
-    pub async fn new(nodes: Vec<&str>, username: &str, password: &str, db_name: &str, table_name: &str) -> anyhow::Result<Self> {
-        // let session = SessionBuilder::new()
-        //     .known_nodes(&nodes)
-        //     .user(username, password)
-        //     .load_balancing(Arc::new(RoundRobinPolicy::new()))
-        //     .build()
-        //     .await
-        //     .unwrap();;
-
+    pub fn new(nodes: Vec<&str>, username: &str, password: &str, db_name: &str, table_name: &str) -> anyhow::Result<Self> {
         Ok(ScyllaClusterDataSource {
-            // session: Arc::new(Mutex::new(session)),
             db_nodes: nodes.iter().map(|x| x.to_string()).collect(),
             db_user: username.to_string(),
             db_pwd: password.to_string(),

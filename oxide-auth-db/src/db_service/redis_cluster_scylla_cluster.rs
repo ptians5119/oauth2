@@ -44,16 +44,7 @@ impl RedisClusterScyllaCluster {
             client
         };
 
-        // let session = SessionBuilder::new()
-        //     .known_nodes(&db_nodes)
-        //     .user(db_user, db_pwd)
-        //     .load_balancing(Arc::new(RoundRobinPolicy::new()))
-        //     .build()
-        //     .await
-        //     .unwrap();
-
         Ok(RedisClusterScyllaCluster {
-            // scylla_session: Arc::new(Mutex::new(session)),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
             db_nodes: db_nodes.iter().map(|x| x.to_string()).collect(),
@@ -102,7 +93,7 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             }
         };
         if &client_str == ""{
-            debug!("into tokio current");
+            // debug!("into tokio current");
             // let session = self.scylla_session.clone();
             // let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string())?;
             let (tx, rx) = std::sync::mpsc::channel();
@@ -125,7 +116,7 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             });
             let _ = th.join();
             let client = rx.recv()??;
-            debug!("out tokio current");
+            // debug!("out tokio current");
             Ok(client.to_encoded_client()?)
         }else{
             let client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

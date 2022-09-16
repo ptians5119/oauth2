@@ -26,7 +26,7 @@ pub struct RedisIsolateScyllaCluster {
 
 
 impl RedisIsolateScyllaCluster {
-    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
+    pub fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
         let mut info = ConnectionInfo::from_str(redis_nodes[0]).map_err(|err|{
             error!("{}", err.to_string());
             err
@@ -40,16 +40,7 @@ impl RedisIsolateScyllaCluster {
             err
         })?;
 
-        let session = SessionBuilder::new()
-            .known_nodes(&db_nodes)
-            .user(db_user, db_pwd)
-            .load_balancing(Arc::new(RoundRobinPolicy::new()))
-            .build()
-            .await
-            .unwrap();
-
         Ok(RedisIsolateScyllaCluster {
-            // scylla_session: Arc::new(Mutex::new(session)),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
             db_nodes: db_nodes.iter().map(|x| x.to_string()).collect(),

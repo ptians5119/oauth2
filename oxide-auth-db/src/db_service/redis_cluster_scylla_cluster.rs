@@ -30,7 +30,7 @@ pub struct RedisClusterScyllaCluster {
 
 
 impl RedisClusterScyllaCluster {
-    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
+    pub fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
 
         let client = {
             let mut builder = ClusterClientBuilder::new(redis_nodes);

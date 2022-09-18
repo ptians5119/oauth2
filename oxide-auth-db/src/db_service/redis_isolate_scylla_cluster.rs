@@ -33,7 +33,7 @@ impl RedisIsolateScyllaCluster {
         })?;
 
         if redis_pwd.is_some(){
-            info.passwd = redis_pwd.map(|s|s.to_string());
+            info.redis.password = redis_pwd.map(|s|s.to_string());
         }
         let client = Client::open(info).map_err(|err|{
             error!("{}", err.to_string());

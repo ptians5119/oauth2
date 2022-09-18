@@ -14,11 +14,8 @@ use url::Url;
 use super::client_data::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;
 
-// type CurrentSession = Session<RoundRobin<TcpConnectionPool<StaticPasswordAuthenticator>>>;
-
 /// redis datasource to Client entries.
 pub struct RedisClusterScyllaCluster {
-    // scylla_session: Arc<Mutex<Session>>,
     redis_client: Client,
     redis_prefix: String,
     db_nodes: Vec<String>,
@@ -35,7 +32,7 @@ impl RedisClusterScyllaCluster {
         let client = {
             let mut builder = ClusterClientBuilder::new(redis_nodes);
             if redis_pwd.is_some() {
-                builder = builder.password(redis_pwd.unwrap_or_default().to_string());
+                builder = builder.password(redis_pwd.unwrap().to_string());
             }
             let client = builder.open().map_err(|err|{
                 error!("{}", err.to_string());
@@ -93,9 +90,6 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             }
         };
         if &client_str == ""{
-            // debug!("into tokio current");
-            // let session = self.scylla_session.clone();
-            // let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string())?;
             let (tx, rx) = std::sync::mpsc::channel();
             let nodes = self.db_nodes.clone();
             let user = self.db_user.clone();

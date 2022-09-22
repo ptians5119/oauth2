@@ -22,7 +22,7 @@ impl RedisDataSource {
             error!("{}", err.to_string());
             err
         })?;
-        info.passwd = password;
+        info.redis.password = password;
         let redis_client = Client::open(info).map_err(|err|{
             error!("{}", err.to_string());
             err

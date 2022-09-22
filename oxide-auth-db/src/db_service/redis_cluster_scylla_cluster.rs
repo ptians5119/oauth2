@@ -1,15 +1,12 @@
 use oxide_auth::primitives::registrar::EncodedClient;
 
-use redis::{Commands, RedisError, ErrorKind, ConnectionInfo};
+use redis::Commands;
 use redis::cluster::{ClusterClient as Client, ClusterClientBuilder};
 
-use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
+use scylla::{Session, SessionBuilder};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-use std::str::FromStr;
-use url::Url;
 
 use super::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;

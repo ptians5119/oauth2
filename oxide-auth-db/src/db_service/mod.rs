@@ -10,7 +10,6 @@ use std::io::{Error, ErrorKind};
 use scylla::{Session, IntoTypedRows};
 use std::sync::{Arc, mpsc};
 use tokio::sync::Mutex;
-use futures::executor::block_on;
 use tokio::runtime::Handle;
 use std::thread;
 use std::time::Duration;
@@ -35,33 +34,6 @@ cfg_if::cfg_if! {
 }
 
 pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
-    // block_on(async {
-    //     let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
-    //                 , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
-    //     let res = {
-    //         println!("inside");
-    //         let ss = session.lock().await;
-    //         println!("get session");
-    //         match ss.query(smt.clone(), &[]).await {
-    //             Ok(r) => r,
-    //             Err(e) => {
-    //                 return Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
-    //             }
-    //         }
-    //     };
-    //     println!("get rows");
-    //     for row in res.rows.unwrap()
-    //         .into_typed::<StringfiedEncodedClient>() {
-    //         let client = match row {
-    //             Ok(r) => r,
-    //             Err(_e) => {
-    //                 return Err(Error::new(ErrorKind::Other, "parse client error"))
-    //             }
-    //         };
-    //         return Ok(client)
-    //     }
-    //     Err(Error::new(ErrorKind::Other, "no client"))
-    // })
 
 
     let handle = Handle::current();
@@ -82,7 +54,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                 let client = match row {
                     Ok(r) => r,
                     Err(_e) => {
-                        tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
+                        tx.send(Err(Error::new(ErrorKind::Other, _e.to_string()))).unwrap();
                         return
                     }
                 };
@@ -96,7 +68,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
     th.join().unwrap();
     let client = match rx.recv_timeout(Duration::from_millis(500)) {
         Ok(c) => c,
-        Err(err) => Err(Error::new(ErrorKind::NotFound, err.to_string()))
+        Err(err) => Err(Error::new(ErrorKind::NotFound, format!("cql handle timeout {}", err)))
     };
     client
 }

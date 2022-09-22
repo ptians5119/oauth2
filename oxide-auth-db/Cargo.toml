@@ -26,7 +26,6 @@ log4rs = "0.10.0"
 redis = { version = "0.20", features = ["r2d2", "cluster", "connection-manager", "tokio-comp"] }
 scylla = "0.5.0"
 cfg-if = "1"
-futures = "0.3.17"
 
 [features]
 redis-isolate = []
@@ -34,8 +33,3 @@ redis-cluster = []
 scylla-cluster = []
 redis-isolate-scylla-cluster = []
 redis-cluster-scylla-cluster = []
-#redis-isolate = ["redis"]
-#redis-cluster = ["redis"]
-#scylla-cluster = ["cdrs", "cdrs_helpers_derive"]
-#redis-isolate-scylla-cluster = ["redis", "cdrs", "cdrs_helpers_derive"]
-#redis-cluster-scylla-cluster = ["redis", "cdrs", "cdrs_helpers_derive"]

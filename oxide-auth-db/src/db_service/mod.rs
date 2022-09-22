@@ -36,7 +36,9 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
         let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
         let res = {
+            println!("inside");
             let ss = session.lock().await;
+            println!("get session");
             match ss.query(smt.clone(), &[]).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -44,6 +46,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                 }
             }
         };
+        println!("get rows");
         for row in res.rows.unwrap()
             .into_typed::<StringfiedEncodedClient>() {
             let client = match row {

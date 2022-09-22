@@ -38,7 +38,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
         println!("input block_on");
         let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
-        {
+        let res = {
             let ss = session.lock().await;
             println!("get session");
             let res = match ss.query(smt.clone(), &[]).await {
@@ -47,7 +47,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                     return Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
                 }
             };
-        }
+        };
         println!("get row");
         for row in res.rows.unwrap()
             .into_typed::<StringfiedEncodedClient>() {

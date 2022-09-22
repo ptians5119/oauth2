@@ -41,12 +41,12 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
         let res = {
             let ss = session.lock().await;
             println!("get session");
-            let res = match ss.query(smt.clone(), &[]).await {
+            match ss.query(smt.clone(), &[]).await {
                 Ok(r) => r,
                 Err(e) => {
                     return Err(Error::new(ErrorKind::Other, format!("{:?}", e)))
                 }
-            };
+            }
         };
         println!("get row");
         for row in res.rows.unwrap()

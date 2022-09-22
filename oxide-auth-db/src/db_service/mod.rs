@@ -7,12 +7,10 @@ mod redis_cluster_scylla_cluster;
 
 use client_data::*;
 use std::io::{Error, ErrorKind};
-use scylla::{SessionBuilder, FromRow, Session, IntoTypedRows};
-use std::{sync::{Arc, mpsc}, thread, time::Duration};
-use tokio::runtime::Handle;
-use tokio::sync::{Mutex, oneshot};
+use scylla::{Session, IntoTypedRows};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use futures::executor::block_on;
-use actix_rt::System;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "redis-isolate")] {
@@ -34,8 +32,7 @@ cfg_if::cfg_if! {
 }
 
 pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
-    futures::executor::block_on(async {
-        println!("input block_on");
+    block_on(async {
         let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
         let res = {
@@ -55,44 +52,8 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                     return Err(Error::new(ErrorKind::Other, "parse client error"))
                 }
             };
-            debug!("get client");
             return Ok(client)
         }
         Err(Error::new(ErrorKind::Other, "no client"))
     })
-    // let (tx, rx) = oneshot::channel();
-    // println!("oxide-db: inside");
-    // System::current().arbiter().spawn(async move {
-    //     let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
-    //             , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
-    //     let res = match session.lock().await.query(smt.clone(), &[]).await {
-    //         Ok(r) => r,
-    //         Err(e) => {
-    //             tx.send(Err(Error::new(ErrorKind::Other, format!("{:?}", e)))).unwrap();
-    //             return
-    //         }
-    //     };
-    //     println!("oxide-db: get row");
-    //     for row in res.rows.unwrap()
-    //         .into_typed::<StringfiedEncodedClient>() {
-    //         let client = match row {
-    //             Ok(r) => r,
-    //             Err(_e) => {
-    //                 tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
-    //                 return
-    //             }
-    //         };
-    //         debug!("get client");
-    //         tx.send(Ok(client)).unwrap();
-    //         return
-    //     }
-    //     tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
-    // });
-    // let client = match block_on(async {
-    //     rx.await
-    // }) {
-    //     Ok(c) => c,
-    //     Err(err) => Err(Error::new(ErrorKind::NotFound, err.to_string()))
-    // };
-    // client
 }

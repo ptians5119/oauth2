@@ -71,8 +71,8 @@ impl RedisClusterScyllaCluster {
         Ok(())
     }
 
-    pub fn test(self, id: &str) {
-        let r = self.find_client_by_id("1234567");
+    pub fn test(&self, id: &str) {
+        let r = self.find_client_by_id(id);
         println!("{:?}", r);
     }
 

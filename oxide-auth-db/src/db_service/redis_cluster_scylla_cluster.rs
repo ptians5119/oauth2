@@ -71,6 +71,10 @@ impl RedisClusterScyllaCluster {
         Ok(())
     }
 
+    pub fn test(self, id: &str) {
+        self.find_client_by_id("1234567");
+    }
+
 }
 
 impl OauthClientDBRepository for RedisClusterScyllaCluster {

@@ -6,7 +6,8 @@
 
 #[macro_use]
 extern crate log;
-use actix::{MailboxError, Message};
+use actix::MailboxError;
+use xtra::Message;
 use actix_web::{
     body::BoxBody,
     HttpResponseBuilder,
@@ -318,7 +319,7 @@ impl WebResponse for OAuthResponse {
     fn redirect(&mut self, url: Url) -> Result<(), Self::Error> {
         self.status = StatusCode::FOUND;
         self.headers
-            .insert(header::LOCATION, TryFrom::try_from(url.into_string())?);
+            .insert(header::LOCATION, TryFrom::try_from(url.to_string())?);
         Ok(())
     }
 
@@ -351,7 +352,10 @@ impl WebResponse for OAuthResponse {
 
 impl<Operation, Extras> Message for OAuthMessage<Operation, Extras>
 where
-    Operation: OAuthOperation + 'static,
+    Operation: OAuthOperation + 'static + std::marker::Send,
+    Extras: std::marker::Send + 'static,
+    Operation::Item: std::marker::Send,
+    Operation::Error: std::marker::Send
 {
     type Result = Result<Operation::Item, Operation::Error>;
 }

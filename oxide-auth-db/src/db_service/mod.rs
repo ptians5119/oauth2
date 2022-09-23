@@ -7,12 +7,12 @@ mod redis_cluster_scylla_cluster;
 
 use client_data::*;
 use std::io::{Error, ErrorKind};
-use scylla::{SessionBuilder, FromRow, Session, IntoTypedRows};
-use std::{sync::{Arc, mpsc}, thread, time::Duration};
-use tokio::runtime::Handle;
+use scylla::{Session, IntoTypedRows};
+use std::sync::{Arc, mpsc};
 use tokio::sync::Mutex;
-use tokio::time::sleep;
-use futures::executor::block_on;
+use tokio::runtime::Handle;
+use std::thread;
+use std::time::Duration;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "redis-isolate")] {
@@ -34,6 +34,8 @@ cfg_if::cfg_if! {
 }
 
 pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
+
+
     let handle = Handle::current();
     let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {
@@ -52,7 +54,7 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
                 let client = match row {
                     Ok(r) => r,
                     Err(_e) => {
-                        tx.send(Err(Error::new(ErrorKind::Other, "xxx2"))).unwrap();
+                        tx.send(Err(Error::new(ErrorKind::Other, _e.to_string()))).unwrap();
                         return
                     }
                 };
@@ -63,17 +65,10 @@ pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: Str
             tx.send(Err(Error::new(ErrorKind::NotFound, "no rows"))).unwrap();
         });
     });
-    let client = match rx.recv_timeout(Duration::from_millis(100)) {
-        Ok(c) => c,
-        Err(err) => Err(Error::new(ErrorKind::NotFound, err.to_string()))
-    };
     th.join().unwrap();
+    let client = match rx.recv_timeout(Duration::from_millis(500)) {
+        Ok(c) => c,
+        Err(err) => Err(Error::new(ErrorKind::NotFound, format!("cql handle timeout {}", err)))
+    };
     client
-    // let rx = Arc::new(rx);
-    // for _i in 0..3 {
-    //     debug!("input try_recv");
-    //     if let Ok(c) = rx.recv_timeout(Duration::from_millis(10)) {
-    //         return c
-    //     }
-    // }
 }

@@ -3,6 +3,7 @@ use redis::{Commands, Client, ConnectionInfo};
 
 use scylla::{Session, SessionBuilder};
 use scylla::transport::load_balancing::RoundRobinPolicy;
+use scylla_cql::Consistency;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -40,6 +41,7 @@ impl RedisIsolateScyllaCluster {
             .known_nodes(&db_nodes)
             .user(db_user, db_pwd)
             .load_balancing(Arc::new(RoundRobinPolicy::new()))
+            .default_consistency(Consistency::LocalOne)
             .build()
             .await
             .unwrap();

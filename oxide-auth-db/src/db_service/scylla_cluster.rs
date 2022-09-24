@@ -1,6 +1,7 @@
 use oxide_auth::primitives::registrar::EncodedClient;
 use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
+use scylla_cql::Consistency;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -25,6 +26,7 @@ impl ScyllaClusterDataSource {
             .known_nodes(&nodes)
             .user(username, password)
             .load_balancing(Arc::new(RoundRobinPolicy::new()))
+            .default_consistency(Consistency::LocalOne)
             .build()
             .await
             .unwrap();;

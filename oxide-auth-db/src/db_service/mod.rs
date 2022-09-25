@@ -9,8 +9,6 @@ use client_data::*;
 use std::io::{Error, ErrorKind};
 use scylla::{Session, IntoTypedRows};
 use std::sync::{Arc, mpsc};
-use std::rc::Rc;
-use tokio::sync::Mutex;
 use tokio::runtime::Handle;
 use std::thread;
 use std::time::Duration;
@@ -18,7 +16,7 @@ use std::time::Duration;
 use redis_cluster_scylla_cluster::RedisClusterScyllaCluster;
 pub type DataSource = RedisClusterScyllaCluster;
 
-pub fn get_client(session: Arc<Mutex<Rc<Session>>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
+pub fn get_client(session: Arc<Session>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
 
 
     let handle = Handle::current();
@@ -27,7 +25,7 @@ pub fn get_client(session: Arc<Mutex<Rc<Session>>>, db_name: String, table_name:
         handle.spawn(async move {
             let smt = format!("SELECT client_id, client_secret, redirect_uri, additional_redirect_uris
                     , scopes as default_scope FROM {}.{} where client_id = '{}'", db_name, table_name, id);
-            let res = match session.lock().await.query(smt.clone(), &[]).await {
+            let res = match session.query(smt.clone(), &[]).await {
                 Ok(r) => r,
                 Err(e) => {
                     tx.send(Err(Error::new(ErrorKind::Other, format!("{:?}", e)))).unwrap();
@@ -51,7 +49,7 @@ pub fn get_client(session: Arc<Mutex<Rc<Session>>>, db_name: String, table_name:
         });
     });
     th.join().unwrap();
-    let client = match rx.recv_timeout(Duration::from_millis(500)) {
+    let client = match rx.recv_timeout(Duration::from_millis(1000)) {
         Ok(c) => c,
         Err(err) => Err(Error::new(ErrorKind::NotFound, format!("cql handle timeout {}", err)))
     };

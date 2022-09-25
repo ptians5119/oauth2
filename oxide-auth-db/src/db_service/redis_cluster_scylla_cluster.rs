@@ -7,7 +7,6 @@ use scylla::{Session, SessionBuilder};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use scylla_cql::Consistency;
 use std::sync::Arc;
-use std::rc::Rc;
 use tokio::sync::Mutex;
 
 use super::StringfiedEncodedClient;
@@ -15,7 +14,7 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 
 /// redis datasource to Client entries.
 pub struct RedisClusterScyllaCluster {
-    scylla_session: Rc<Session>,
+    scylla_session: Arc<Session>,
     redis_client: Client,
     redis_prefix: String,
     db_name: String,
@@ -48,7 +47,7 @@ impl RedisClusterScyllaCluster {
             .unwrap();
 
         Ok(RedisClusterScyllaCluster {
-            scylla_session: Rc::new(session),
+            scylla_session: Arc::new(session),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
             db_name: db_name.to_string(),
@@ -94,7 +93,7 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
             }
         };
         if &client_str == ""{
-            let session = Arc::new(Mutex::new(self.scylla_session.clone()));
+            let session = self.scylla_session.clone();
             let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string())?;
             Ok(client.to_encoded_client()?)
         }else{

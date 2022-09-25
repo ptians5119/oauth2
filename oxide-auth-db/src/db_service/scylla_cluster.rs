@@ -3,8 +3,6 @@ use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use scylla_cql::Consistency;
 use std::sync::Arc;
-use std::rc::Rc;
-use tokio::sync::Mutex;
 
 use std::str::FromStr;
 use std::time::Duration;
@@ -15,7 +13,7 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 
 
 pub struct ScyllaClusterDataSource {
-    session: Rc<Session>,
+    session: Arc<Session>,
     db_name: String,
     table_name: String,
 }
@@ -33,7 +31,7 @@ impl ScyllaClusterDataSource {
             .unwrap();;
 
         Ok(ScyllaClusterDataSource {
-            session: Rc::new(session),
+            session: Arc::new(session),
             db_name: db_name.to_string(),
             table_name: table_name.to_string(),
         })
@@ -51,7 +49,7 @@ impl OauthClientDBRepository for ScyllaClusterDataSource {
     }
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
-        let session = Arc::new(Mutex::new(self.session.clone()));
+        let session = self.session.clone();
         let client = super::get_client(session, self.db_name.clone(), self.table_name.clone(), id.to_string())?;
         Ok(client.to_encoded_client()?)
     }

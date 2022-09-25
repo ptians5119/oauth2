@@ -19,6 +19,7 @@ oxide-auth = { version = "0.5.0", path = "../oxide-auth" }
 serde_urlencoded = "0.7"
 url = "2"
 log = "0.4"
+xtra = "0.5.2"
 
 [dev-dependencies]
 base64 = "0.12"

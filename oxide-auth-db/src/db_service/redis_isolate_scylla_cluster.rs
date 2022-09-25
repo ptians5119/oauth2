@@ -1,32 +1,30 @@
 use oxide_auth::primitives::registrar::EncodedClient;
-use redis::{Commands, RedisError, ErrorKind, Client, ConnectionInfo, ToRedisArgs};
+use redis::{Commands, Client, ConnectionInfo};
 
-use scylla::{IntoTypedRows, Session, SessionBuilder, SessionConfig};
+use scylla::{Session, SessionBuilder};
 use scylla::transport::load_balancing::RoundRobinPolicy;
-use std::sync::{Arc};
+use scylla_cql::Consistency;
+use std::sync::Arc;
+use std::rc::Rc;
 use tokio::sync::Mutex;
 
 use std::str::FromStr;
-use url::Url;
 
 use crate::primitives::db_registrar::OauthClientDBRepository;
-use super::client_data::StringfiedEncodedClient;
+use super::StringfiedEncodedClient;
 
 /// redis datasource to Client entries.
 pub struct RedisIsolateScyllaCluster {
-    // scylla_session: Arc<Mutex<Session>>,
+    scylla_session: Rc<Session>,
     redis_client: Client,
     redis_prefix: String,
-    db_nodes: Vec<String>,
-    db_user: String,
-    db_pwd: String,
     db_name: String,
     db_table: String,
 }
 
 
 impl RedisIsolateScyllaCluster {
-    pub fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
+    pub async fn new(redis_nodes: Vec<&str>, redis_prefix: &str, redis_pwd: Option<&str>, db_nodes: Vec<&str>, db_user: &str, db_pwd: &str, db_name: &str, db_table: &str) -> anyhow::Result<Self> {
         let mut info = ConnectionInfo::from_str(redis_nodes[0]).map_err(|err|{
             error!("{}", err.to_string());
             err
@@ -40,12 +38,19 @@ impl RedisIsolateScyllaCluster {
             err
         })?;
 
+        let session = SessionBuilder::new()
+            .known_nodes(&db_nodes)
+            .user(db_user, db_pwd)
+            .load_balancing(Arc::new(RoundRobinPolicy::new()))
+            .default_consistency(Consistency::LocalOne)
+            .build()
+            .await
+            .unwrap();
+
         Ok(RedisIsolateScyllaCluster {
+            scylla_session: Rc::new(session),
             redis_client: client,
             redis_prefix: redis_prefix.to_string(),
-            db_nodes: db_nodes.iter().map(|x| x.to_string()).collect(),
-            db_user: db_user.to_string(),
-            db_pwd: db_pwd.to_string(),
             db_name: db_name.to_string(),
             db_table: db_table.to_string(),
         })
@@ -88,26 +93,8 @@ impl OauthClientDBRepository for RedisIsolateScyllaCluster {
             }
         };
         if &client_str == ""{
-            let (tx, rx) = std::sync::mpsc::channel();
-            let nodes = self.db_nodes.clone();
-            let user = self.db_user.clone();
-            let pwd = self.db_pwd.clone();
-            let db = self.db_name.clone();
-            let table = self.db_table.clone();
-            let id = id.to_string();
-            let th = std::thread::spawn(move || {
-                let client = super::scylla::handle(
-                    nodes,
-                    user,
-                    pwd,
-                    db,
-                    table,
-                    id
-                );
-                let _ = tx.send(client);
-            });
-            let _ = th.join();
-            let client = rx.recv()??;
+            let session = Arc::new(Mutex::new(self.scylla_session.clone()));
+            let client = super::get_client(session, self.db_name.clone(), self.db_table.clone(), id.to_string())?;
             Ok(client.to_encoded_client()?)
         }else{
             let stringfied_client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

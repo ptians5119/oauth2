@@ -9,31 +9,16 @@ use client_data::*;
 use std::io::{Error, ErrorKind};
 use scylla::{Session, IntoTypedRows};
 use std::sync::{Arc, mpsc};
+use std::rc::Rc;
 use tokio::sync::Mutex;
 use tokio::runtime::Handle;
 use std::thread;
 use std::time::Duration;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "redis-isolate")] {
-        use redis_isolate::RedisDataSource ;
-        pub type DataSource = RedisDataSource;
-    }else if  #[cfg(feature = "redis-cluster")]{
-        use redis_cluster::RedisClusterDataSource ;
-        pub type DataSource = RedisClusterDataSource;
-    }else if #[cfg(feature = "scylla-cluster")] {
-        use scylla_cluster::ScyllaClusterDataSource ;
-        pub type DataSource = ScyllaClusterDataSource;
-    }else if #[cfg(feature = "redis-isolate-scylla-cluster")]{
-        use redis_isolate_scylla_cluster::RedisIsolateScyllaCluster;
-        pub type DataSource = RedisIsolateScyllaCluster;
-    }else if #[cfg(feature = "redis-cluster-scylla-cluster")]{
-        use redis_cluster_scylla_cluster::RedisClusterScyllaCluster;
-        pub type DataSource = RedisClusterScyllaCluster;
-    }
-}
+use redis_cluster_scylla_cluster::RedisClusterScyllaCluster;
+pub type DataSource = RedisClusterScyllaCluster;
 
-pub fn get_client(session: Arc<Mutex<Session>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
+pub fn get_client(session: Arc<Mutex<Rc<Session>>>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
 
 
     let handle = Handle::current();

@@ -528,11 +528,53 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.access.get(token).map(|token| token.grant.clone()))
+        let mut connection = match self.redis.get_connection() {
+            Ok(c) => c,
+            Err(err) => {
+                error!("get connection error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        let grant = match connection.hget::<&str, String, String>("oauth2:tokenmap_access", token.to_string()) {
+            Ok(str) => {
+                let _token = match serde_json::from_str::<Token>(str.as_str()) {
+                    Ok(t) => t,
+                    Err(err) => {
+                        error!("deserde token error: {}", err.to_string());
+                        return Err(())
+                    }
+                };
+                Some(_token.grant)
+            }
+            _ => None
+        };
+        Ok(grant)
+        // Ok(self.access.get(token).map(|token| token.grant.clone()))
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.refresh.get(token).map(|token| token.grant.clone()))
+        let mut connection = match self.redis.get_connection() {
+            Ok(c) => c,
+            Err(err) => {
+                error!("get connection error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        let grant = match connection.hget::<&str, String, String>("oauth2:tokenmap_refresh", token.to_string()) {
+            Ok(str) => {
+                let _token = match serde_json::from_str::<Token>(str.as_str()) {
+                    Ok(t) => t,
+                    Err(err) => {
+                        error!("deserde token error: {}", err.to_string());
+                        return Err(())
+                    }
+                };
+                Some(_token.grant)
+            }
+            _ => None
+        };
+        Ok(grant)
+        // Ok(self.refresh.get(token).map(|token| token.grant.clone()))
     }
 }
 

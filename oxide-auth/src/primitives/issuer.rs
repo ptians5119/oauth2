@@ -351,11 +351,12 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
                 return Err(())
             }
         }
-        match connection.set::<_, u64, usize>("oauth2:tokenmap_usage", next_usage) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set usage error");
-                return Err(())
+        match connection.set::<_, u64, String>("oauth2:tokenmap_usage", next_usage) {
+            Ok(str) => {
+                if str.ne("OK") {
+                    error!("set usage error");
+                    return Err(())
+                }
             }
             Err(err) => {
                 error!("set usage error: {}", err.to_string());
@@ -506,11 +507,12 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
                 return Err(())
             }
         }
-        match connection.set::<_, u64, usize>("oauth2:tokenmap_usage", next_usage) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set usage error");
-                return Err(())
+        match connection.set::<_, u64, String>("oauth2:tokenmap_usage", next_usage) {
+            Ok(str) => {
+                if str.ne("OK") {
+                    error!("set usage error");
+                    return Err(())
+                }
             }
             Err(err) => {
                 error!("set usage error: {}", err.to_string());

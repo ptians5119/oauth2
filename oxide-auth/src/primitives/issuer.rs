@@ -167,7 +167,7 @@ impl<G: TagGrant> TokenMap<G> {
             Ok(c) => c,
             Err(err) => {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
+                return
             }
         };
 
@@ -178,14 +178,18 @@ impl<G: TagGrant> TokenMap<G> {
             Ok(str) => str,
             Err(err) => {
                 error!("serde token error: {}", err.to_string());
-                return Err(())
+                return
             }
         };
         match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", token.clone(), token_str) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set tokenmap_access error");
+                return
+            }
             Err(err) => {
                 error!("set tokenmap_access error: {}", err.to_string());
-                return Err(())
+                return
             }
         }
         // self.access.insert(key, Arc::new(token));
@@ -327,6 +331,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         };
         match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", access.clone(), token_str.clone()) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set access error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set access error: {}", err.to_string());
                 return Err(())
@@ -334,6 +342,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         }
         match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_refresh", refresh.clone(), token_str) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set refresh error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set refresh error: {}", err.to_string());
                 return Err(())
@@ -341,6 +353,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         }
         match connection.set::<_, u64, usize>("oauth2:tokenmap_usage", next_usage) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set usage error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set usage error: {}", err.to_string());
                 return Err(())
@@ -380,6 +396,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
                 };
                 match connection.hdel::<_, _, usize>("oauth2:tokenmap_refresh", refresh.to_string()) {
                     Ok(1) => (),
+                    Ok(_) => {
+                        error!("del refresh error");
+                        return Err(())
+                    }
                     Err(err) => {
                         error!("del refresh error: {}", err.to_string());
                         return Err(())
@@ -426,6 +446,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
                 };
                 match connection.hdel::<_, _, usize>("oauth2:tokenmap_access", token.access.clone()) {
                     Ok(1) => (),
+                    Ok(_) => {
+                        error!("del access error");
+                        return Err(())
+                    }
                     Err(err) => {
                         error!("del access error: {}", err.to_string());
                         return Err(())
@@ -462,6 +486,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         };
         match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", new_key, token_str.clone()) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set access error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set access error: {}", err.to_string());
                 return Err(())
@@ -469,6 +497,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         }
         match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_refresh", refresh_key, token_str) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set refresh error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set refresh error: {}", err.to_string());
                 return Err(())
@@ -476,6 +508,10 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         }
         match connection.set::<_, u64, usize>("oauth2:tokenmap_usage", next_usage) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set usage error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set usage error: {}", err.to_string());
                 return Err(())

@@ -129,6 +129,10 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
         // self.usage = next_usage;
         match connection.hset::<&str, String, String, usize>("oauth2:authmap", token.clone(), grant_str) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set authmap error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set authmap error: {}", err.to_string());
                 return Err(())
@@ -136,6 +140,10 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
         }
         match connection.set::<_, u64, usize>("oauth2:authmap_usage", next_usage) {
             Ok(1) => (),
+            Ok(_) => {
+                error!("set usage error");
+                return Err(())
+            }
             Err(err) => {
                 error!("set usage error: {}", err.to_string());
                 return Err(())
@@ -163,6 +171,10 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
                 };
                 match connection.hdel::<_, _, usize>("oauth2:authmap", grant) {
                     Ok(1) => (),
+                    Ok(_) => {
+                        error!("del grant error");
+                        return Err(())
+                    }
                     Err(err) => {
                         error!("del grant error: {}", err.to_string());
                         return Err(())

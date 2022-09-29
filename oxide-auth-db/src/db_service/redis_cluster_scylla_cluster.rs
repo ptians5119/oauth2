@@ -7,7 +7,6 @@ use scylla::{Session, SessionBuilder};
 use scylla::transport::load_balancing::RoundRobinPolicy;
 use scylla_cql::Consistency;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use super::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;
@@ -15,7 +14,7 @@ use crate::primitives::db_registrar::OauthClientDBRepository;
 /// redis datasource to Client entries.
 pub struct RedisClusterScyllaCluster {
     scylla_session: Arc<Session>,
-    redis_client: Client,
+    redis_client: Arc<Client>,
     redis_prefix: String,
     db_name: String,
     db_table: String,
@@ -48,7 +47,7 @@ impl RedisClusterScyllaCluster {
 
         Ok(RedisClusterScyllaCluster {
             scylla_session: Arc::new(session),
-            redis_client: client,
+            redis_client: Arc::new(client),
             redis_prefix: redis_prefix.to_string(),
             db_name: db_name.to_string(),
             db_table: db_table.to_string(),
@@ -68,6 +67,10 @@ impl RedisClusterScyllaCluster {
         Ok(())
     }
 
+    // 新增给oxide-auth用的
+    pub fn get_redis_client(&self) -> Arc<Client> {
+        self.redis_client.clone()
+    }
 }
 
 impl OauthClientDBRepository for RedisClusterScyllaCluster {

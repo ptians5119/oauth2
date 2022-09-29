@@ -6,7 +6,9 @@
 //! side request, it will then check the given parameters to determine the authorization of such
 //! clients.
 use std::collections::HashMap;
-use std::sync::{MutexGuard, RwLockWriteGuard};
+use std::sync::{MutexGuard, RwLockWriteGuard, Arc};
+use redis::cluster::{ClusterClient, ClusterClientBuilder};
+use redis::Commands;
 
 use super::grant::Grant;
 use super::generator::TagGrant;
@@ -31,8 +33,9 @@ pub trait Authorizer {
 /// for two different grants to generate the same token in the issuer.
 pub struct AuthMap<I: TagGrant = Box<dyn TagGrant + Send + Sync + 'static>> {
     tagger: I,
-    usage: u64,
-    tokens: HashMap<String, Grant>,
+    _usage: u64,
+    _tokens: HashMap<String, Grant>,
+    redis: Arc<ClusterClient>
 }
 
 impl<I: TagGrant> AuthMap<I> {
@@ -42,11 +45,12 @@ impl<I: TagGrant> AuthMap<I> {
     /// implementation.
     ///
     /// [`Authorizer`]: ./trait.Authorizer.html
-    pub fn new(tagger: I) -> Self {
+    pub fn new(tagger: I, redis: Arc<ClusterClient>) -> Self {
         AuthMap {
             tagger,
-            usage: 0,
-            tokens: HashMap::new(),
+            _usage: 0,
+            _tokens: HashMap::new(),
+            redis
         }
     }
 }
@@ -97,15 +101,79 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
         // expect the validity time of the grant to have changed by then. This works when you don't
         // set your system time forward/backward ~20billion seconds, assuming ~10^9 operations per
         // second.
-        let next_usage = self.usage.wrapping_add(1);
+        let mut connection = match self.redis.get_connection() {
+            Ok(c) => c,
+            Err(err) => {
+                error!("get connection error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        let curr_usage = match connection.get::<_, u64>("oauth2:authmap_usage") {
+            Ok(u) => u,
+            Err(err) => {
+                error!("get usage error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        // let next_usage = self.usage.wrapping_add(1);
+        let next_usage = curr_usage.wrapping_add(1);
         let token = self.tagger.tag(next_usage - 1, &grant)?;
-        self.tokens.insert(token.clone(), grant);
-        self.usage = next_usage;
+        let grant_str = match serde_json::to_string(&grant) {
+            Ok(str) => str,
+            Err(err) => {
+                error!("serde grant error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        // self.tokens.insert(token.clone(), grant);
+        // self.usage = next_usage;
+        match connection.hset::<&str, String, String, usize>("oauth2:authmap", token.clone(), grant_str) {
+            Ok(1) => (),
+            Err(err) => {
+                error!("set authmap error: {}", err.to_string());
+                return Err(())
+            }
+        }
+        match connection.set::<_, u64, usize>("oauth2:authmap_usage", next_usage) {
+            Ok(1) => (),
+            Err(err) => {
+                error!("set usage error: {}", err.to_string());
+                return Err(())
+            }
+        }
         Ok(token)
     }
 
     fn extract<'a>(&mut self, grant: &'a str) -> Result<Option<Grant>, ()> {
-        Ok(self.tokens.remove(grant))
+        let mut connection = match self.redis.get_connection() {
+            Ok(c) => c,
+            Err(err) => {
+                error!("get connection error: {}", err.to_string());
+                return Err(())
+            }
+        };
+        let grant_value = match connection.hget::<&str, &str, String>("oauth2:authmap", grant) {
+            Ok(str) => {
+                let grant_value = match serde_json::from_str::<Grant>(str.as_str()) {
+                    Ok(g) => Some(g),
+                    Err(err) => {
+                        error!("deserde grant error: {}", err.to_string());
+                        return Err(())
+                    }
+                };
+                match connection.hdel::<_, _, usize>("oauth2:authmap", grant) {
+                    Ok(1) => (),
+                    Err(err) => {
+                        error!("del grant error: {}", err.to_string());
+                        return Err(())
+                    }
+                };
+                grant_value
+            }
+            _ => None
+        };
+        // Ok(self.tokens.remove(grant))
+        Ok(grant_value)
     }
 }
 
@@ -156,23 +224,27 @@ pub mod tests {
 
     #[test]
     fn random_test_suite() {
-        let mut storage = AuthMap::new(RandomGenerator::new(16));
+        let client = get_local_redis();
+
+        let mut storage = AuthMap::new(RandomGenerator::new(16), Arc::new(client));
         simple_test_suite(&mut storage);
     }
 
     #[test]
     fn signing_test_suite() {
+        let client = get_local_redis();
         let assertion = Assertion::new(
             AssertionKind::HmacSha256,
             b"7EGgy8zManReq9l/ez0AyYE+xPpcTbssgW+8gBnIv3s=",
         );
-        let mut storage = AuthMap::new(assertion);
+        let mut storage = AuthMap::new(assertion, Arc::new(client));
         simple_test_suite(&mut storage);
     }
 
     #[test]
     #[should_panic]
     fn bad_generator() {
+        let client = get_local_redis();
         struct BadGenerator;
         impl TagGrant for BadGenerator {
             fn tag(&mut self, _: u64, _: &Grant) -> Result<String, ()> {
@@ -180,7 +252,15 @@ pub mod tests {
             }
         }
 
-        let mut storage = AuthMap::new(BadGenerator);
+        let mut storage = AuthMap::new(BadGenerator, Arc::new(client));
         simple_test_suite(&mut storage);
+    }
+
+    pub fn get_local_redis() -> ClusterClient {
+        let builder = ClusterClientBuilder::new(vec!["redis://127.0.0.1:6379"]);
+        builder.open().map_err(|err|{
+            error!("{}", err.to_string());
+            err
+        }).unwrap()
     }
 }

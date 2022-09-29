@@ -6,6 +6,7 @@ use crate::primitives::scope::Scope;
 use crate::frontends::simple::endpoint::resource_flow;
 
 use chrono::{Utc, Duration};
+use std::sync::Arc;
 
 use super::CraftedRequest;
 use super::defaults::*;
@@ -23,7 +24,8 @@ impl ResourceSetup {
         use crate::primitives::issuer::Issuer;
 
         // Ensure that valid tokens are 16 bytes long, so we can craft an invalid one
-        let mut issuer = TokenMap::new(RandomGenerator::new(16));
+        let client = super::get_local_redis();
+        let mut issuer = TokenMap::new(RandomGenerator::new(16), Arc::new(client));
 
         let authtoken = issuer
             .issue(Grant {

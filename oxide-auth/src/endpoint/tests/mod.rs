@@ -5,6 +5,8 @@ use crate::primitives::grant::Grant;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use redis::cluster::{ClusterClientBuilder, ClusterClient};
+
 use url::Url;
 
 /// Open and simple implementation of `WebRequest`.
@@ -221,3 +223,11 @@ mod access_token;
 mod resource;
 mod refresh;
 mod pkce;
+
+pub fn get_local_redis() -> ClusterClient {
+    let builder = ClusterClientBuilder::new(vec!["redis://127.0.0.1:6379"]);
+    builder.open().map_err(|err|{
+        error!("{}", err.to_string());
+        err
+    }).unwrap()
+}

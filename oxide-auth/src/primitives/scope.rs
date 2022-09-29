@@ -3,6 +3,8 @@ use std::{cmp, fmt, str};
 
 use std::collections::HashSet;
 
+use serde::{Serialize, Deserialize};
+
 /// Scope of a given grant or resource, a set of scope-tokens separated by spaces.
 ///
 /// Scopes are interpreted as a conjunction of scope tokens, i.e. a scope is fulfilled if all of
@@ -43,7 +45,7 @@ use std::collections::HashSet;
 ///
 /// In particular, the characters '\x22' (`"`) and '\x5c' (`\`)  are not allowed.
 ///
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Scope {
     tokens: HashSet<String>,
 }

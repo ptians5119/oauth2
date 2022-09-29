@@ -290,8 +290,8 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         let curr_usage = match connection.get::<_, u64>("oauth2:tokenmap_usage") {
             Ok(u) => u,
             Err(err) => {
-                error!("get usage error: {}", err.to_string());
-                return Err(())
+                error!("get usage error: {}, generate it to 0", err.to_string());
+                0
             }
         };
         let next_usage = curr_usage.wrapping_add(2);

@@ -88,7 +88,7 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
 
     fn find_client_by_id(&self, id: &str) -> anyhow::Result<EncodedClient> {
         let mut r = self.redis_client.get_connection()?;
-        let client_str = match r.get::<&str, String>(&(self.redis_prefix.to_owned() + id)){
+        let client_str = match r.hget::<&str, &str, String>(&(self.redis_prefix.to_owned() + ":clients"), id){
             Ok(v) => {v}
             Err(err) => {
                 error!("{}", err.to_string());
@@ -98,6 +98,9 @@ impl OauthClientDBRepository for RedisClusterScyllaCluster {
         if &client_str == ""{
             let session = self.scylla_session.clone();
             let client = super::get_client(session,self.db_name.clone(), self.db_table.clone(), id.to_string())?;
+            // 增加一项redis数据的处理
+            let client_str = serde_json::to_string(&client)?;
+            let _ = r.hset::<&str, &str, String, _>(&(self.redis_prefix.to_owned() + ":clients"), id, client_str)?;
             Ok(client.to_encoded_client()?)
         }else{
             let client = serde_json::from_str::<StringfiedEncodedClient>(&client_str)?;

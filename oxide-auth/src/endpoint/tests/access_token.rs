@@ -6,6 +6,7 @@ use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 use crate::frontends::simple::endpoint::access_token_flow;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use base64;
 use chrono::{Utc, Duration};
@@ -24,9 +25,11 @@ struct AccessTokenSetup {
 
 impl AccessTokenSetup {
     fn private_client() -> Self {
+        let client = super::get_local_redis();
+        let client = Arc::new(client);
         let mut registrar = ClientMap::new();
-        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
-        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()), client.clone());
+        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()), client);
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
@@ -60,9 +63,11 @@ impl AccessTokenSetup {
     }
 
     fn public_client() -> Self {
+        let client = super::get_local_redis();
+        let client = Arc::new(client);
         let mut registrar = ClientMap::new();
-        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
-        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()));
+        let mut authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()), client.clone());
+        let issuer = TokenMap::new(TestGenerator("AccessToken".to_string()), client);
 
         let client = Client::public(
             EXAMPLE_CLIENT_ID,

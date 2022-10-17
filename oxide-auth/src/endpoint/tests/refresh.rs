@@ -4,6 +4,7 @@ use crate::primitives::grant::{Grant, Extensions};
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use base64;
 use chrono::{Utc, Duration};
@@ -29,7 +30,8 @@ struct RefreshTokenSetup {
 impl RefreshTokenSetup {
     fn private_client() -> Self {
         let mut registrar = ClientMap::new();
-        let mut issuer = TokenMap::new(RandomGenerator::new(16));
+        let client = super::get_local_redis();
+        let mut issuer = TokenMap::new(RandomGenerator::new(16), Arc::new(client));
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,
@@ -67,7 +69,8 @@ impl RefreshTokenSetup {
 
     fn public_client() -> Self {
         let mut registrar = ClientMap::new();
-        let mut issuer = TokenMap::new(RandomGenerator::new(16));
+        let client = super::get_local_redis();
+        let mut issuer = TokenMap::new(RandomGenerator::new(16), Arc::new(client));
 
         let client = Client::public(
             EXAMPLE_CLIENT_ID,

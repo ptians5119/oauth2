@@ -9,8 +9,6 @@ use std::time::Duration;
 use super::client_data::StringfiedEncodedClient;
 use crate::primitives::db_registrar::OauthClientDBRepository;
 
-
-
 /// redis datasource to Client entries.
 #[derive(Clone)]
 pub struct RedisClusterDataSource {

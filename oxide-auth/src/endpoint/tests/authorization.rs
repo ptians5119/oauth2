@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::primitives::authorizer::AuthMap;
 use crate::primitives::registrar::{Client, ClientMap, RegisteredUrl};
@@ -18,8 +19,9 @@ struct AuthorizationSetup {
 
 impl AuthorizationSetup {
     fn new() -> AuthorizationSetup {
+        let client = super::get_local_redis();
         let mut registrar = ClientMap::new();
-        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()));
+        let authorizer = AuthMap::new(TestGenerator("AuthToken".to_string()), Arc::new(client));
 
         let client = Client::confidential(
             EXAMPLE_CLIENT_ID,

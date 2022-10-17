@@ -12,6 +12,7 @@ use super::{Allow, Body, CraftedResponse, CraftedRequest, Status, TestGenerator,
 use super::defaults::*;
 
 use serde_json;
+use std::sync::Arc;
 
 struct PkceSetup {
     registrar: ClientMap,
@@ -33,9 +34,11 @@ impl PkceSetup {
         let mut registrar = ClientMap::new();
         registrar.register_client(client);
 
+        let client = super::get_local_redis();
+        let client = Arc::new(client);
         let token = "ExampleAuthorizationToken".to_string();
-        let authorizer = AuthMap::new(TestGenerator(token.clone()));
-        let issuer = TokenMap::new(RandomGenerator::new(16));
+        let authorizer = AuthMap::new(TestGenerator(token.clone()), client.clone());
+        let issuer = TokenMap::new(RandomGenerator::new(16), client);
 
         PkceSetup {
             registrar: registrar,

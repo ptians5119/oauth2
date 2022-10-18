@@ -4,8 +4,6 @@
 //! `AsActor<_>` to create an actor implementing endpoint functionality via messages.
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate log;
 use actix::MailboxError;
 use xtra::Message;
 use actix_web::{

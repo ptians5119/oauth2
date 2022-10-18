@@ -1,8 +1,4 @@
 mod client_data;
-mod redis_isolate;
-mod redis_cluster;
-mod scylla_cluster;
-mod redis_isolate_scylla_cluster;
 mod redis_cluster_scylla_cluster;
 
 use client_data::*;
@@ -17,8 +13,6 @@ use redis_cluster_scylla_cluster::RedisClusterScyllaCluster;
 pub type DataSource = RedisClusterScyllaCluster;
 
 pub fn get_client(session: Arc<Session>, db_name: String, table_name: String, id: String) -> Result<StringfiedEncodedClient, Error> {
-
-
     let handle = Handle::current();
     let (tx, rx) = mpsc::channel();
     let th = thread::spawn(move || {

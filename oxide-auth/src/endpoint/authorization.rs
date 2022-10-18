@@ -13,7 +13,7 @@ use crate::code_grant::accesstoken::{
 
 use super::*;
 use crate::code_grant::error::AccessTokenErrorType;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 
 /// All relevant methods for handling authorization code requests.
 pub struct AuthorizationFlow<E, R>

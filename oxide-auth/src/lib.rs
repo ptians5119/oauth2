@@ -63,7 +63,7 @@
 //! [`Issuer`]: primitives/issuer/trait.Issuer.html
 //! [`OwnerSolicitor`]: endpoint/trait.OwnerSolicitor.html
 //! [`Scopes`]: endpoint/trait.Scopes.html
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 
 #[macro_use]
 extern crate log;

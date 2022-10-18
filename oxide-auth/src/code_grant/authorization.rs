@@ -10,7 +10,7 @@ use crate::primitives::authorizer::Authorizer;
 use crate::primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
 use crate::primitives::grant::{Extensions, Grant};
 use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
-use crate::primitives::issuer::{IssuedToken, Issuer};
+use crate::primitives::issuer::Issuer;
 
 /// Interface required from a request to determine the handling in the backend.
 pub trait Request {

@@ -2,7 +2,6 @@ use oxide_auth::primitives::prelude::Scope;
 use oxide_auth::primitives::registrar::{ClientType, EncodedClient, RegisteredUrl, ExactUrl};
 use scylla::FromRow;
 use std::str::FromStr;
-use std::borrow::Borrow;
 
 
 /// A client whose credentials have been wrapped by a password policy.

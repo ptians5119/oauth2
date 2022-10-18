@@ -1,19 +1,13 @@
 //! Provides the handling for Authorization Code Requests
 use std::borrow::Cow;
-use std::result::Result as StdResult;
-
-use url::Url;
 use chrono::{Duration, Utc};
 
-use crate::primitives::issuer::{IssuedToken, Issuer};
-use crate::primitives::authorizer::Authorizer;
-use crate::primitives::registrar::{ClientUrl, ExactUrl, Registrar, RegistrarError, PreGrant};
+use crate::primitives::issuer::IssuedToken;
+use crate::primitives::registrar::{ClientUrl, ExactUrl, RegistrarError};
 use crate::primitives::grant::{Extensions, Grant};
-use crate::{endpoint::Scope, endpoint::Solicitation, primitives::registrar::BoundClient};
 use crate::code_grant::accesstoken::{Error, BearerToken};
 use crate::code_grant::authorization::{Endpoint, Request};
 use crate::code_grant::error::*;
-use std::ops::Add;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -87,7 +81,7 @@ pub fn authorization_token(handler: &mut dyn Endpoint, request: &dyn Request) ->
         Error::invalid_with(AccessTokenErrorType::ServerError)
     })?;
 
-    let mut token = IssuedToken::without_refresh(token.token, token.until);
+    let token = IssuedToken::without_refresh(token.token, token.until);
 
     info!("client={:?} token={:?}", client_url.clone(), token.clone());
 

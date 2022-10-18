@@ -7,7 +7,7 @@
 //! clients.
 use std::collections::HashMap;
 use std::sync::{MutexGuard, RwLockWriteGuard, Arc};
-use redis::cluster::{ClusterClient, ClusterClientBuilder};
+use redis::cluster::ClusterClient;
 use redis::Commands;
 
 use super::grant::Grant;
@@ -101,44 +101,27 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
         // expect the validity time of the grant to have changed by then. This works when you don't
         // set your system time forward/backward ~20billion seconds, assuming ~10^9 operations per
         // second.
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        let curr_usage = match connection.get::<_, u64>("oauth2:authmap_usage") {
+                ()
+            })?;
+        let curr_usage = match connection.get::<_, u64>("oauth2:auth_map:usage") {
             Ok(u) => u,
             Err(err) => {
                 error!("get usage error: {}, generate it to 0", err.to_string());
                 0
             }
         };
-        // let next_usage = self.usage.wrapping_add(1);
+
         let next_usage = curr_usage.wrapping_add(1);
         let token = self.tagger.tag(next_usage - 1, &grant)?;
-        let grant_str = match serde_json::to_string(&grant) {
-            Ok(str) => str,
-            Err(err) => {
-                error!("serde grant error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        // self.tokens.insert(token.clone(), grant);
-        // self.usage = next_usage;
-        match connection.hset::<&str, String, String, usize>("oauth2:authmap", token.clone(), grant_str) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set authmap error");
-                return Err(())
-            }
-            Err(err) => {
-                error!("set authmap error: {}", err.to_string());
-                return Err(())
-            }
-        }
-        match connection.set::<_, u64, String>("oauth2:authmap_usage", next_usage) {
+
+        // 设置grant
+        let key = format!("oauth2:auth_map:{}", &token);
+        let _ = super::set_grant(&mut connection, key.as_str(), &grant, 600)?;
+
+        match connection.set::<_, u64, String>("oauth2:auth_map:usage", next_usage) {
             Ok(str) => {
                 if str.ne("OK") {
                     error!("set usage error");
@@ -154,39 +137,25 @@ impl<I: TagGrant> Authorizer for AuthMap<I> {
     }
 
     fn extract<'a>(&mut self, grant: &'a str) -> Result<Option<Grant>, ()> {
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
+                ()
+            })?;
+
+        // 获取grant
+        let key = format!("oauth2:auth_map:{}", &grant);
+        let grant_value = super::get_grant(&mut connection, key.as_str());
+
+        match connection.del::<&str, usize>(key.as_str()) {
+            Ok(1) => (),
+            _ => {
+                error!("del oauth2:auth_map:{} error", grant);
                 return Err(())
             }
-        };
-        let grant_value = match connection.hget::<&str, &str, String>("oauth2:authmap", grant) {
-            Ok(str) => {
-                let grant_value = match serde_json::from_str::<Grant>(str.as_str()) {
-                    Ok(g) => Some(g),
-                    Err(err) => {
-                        error!("deserde grant error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                match connection.hdel::<_, _, usize>("oauth2:authmap", grant) {
-                    Ok(1) => (),
-                    Ok(_) => {
-                        error!("del grant error");
-                        return Err(())
-                    }
-                    Err(err) => {
-                        error!("del grant error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                grant_value
-            }
-            _ => None
-        };
-        // Ok(self.tokens.remove(grant))
-        Ok(grant_value)
+        }
+
+        grant_value
     }
 }
 
@@ -197,6 +166,7 @@ pub mod tests {
     use chrono::Utc;
     use crate::primitives::grant::Extensions;
     use crate::primitives::generator::{Assertion, AssertionKind, RandomGenerator};
+    use redis::cluster::ClusterClientBuilder;
 
     /// Tests some invariants that should be upheld by all authorizers.
     ///

@@ -50,7 +50,7 @@ pub struct Extensions {
 ///
 /// This can be stored in a database without worrying about lifetimes or shared across thread
 /// boundaries. A reference to this can be converted to a purely referential `GrantRef`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Grant {
     /// Identifies the owner of the resource.
     pub owner_id: String,

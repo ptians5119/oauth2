@@ -6,10 +6,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, MutexGuard, RwLockWriteGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use redis::cluster::{ClusterClient, ClusterClientBuilder};
+use redis::cluster::ClusterClient;
 use redis::Commands;
-use serde::{Serialize, Deserialize};
-// use crate::primitives::registrar::Registrar;
 
 use chrono::{Duration, Utc};
 
@@ -103,14 +101,14 @@ pub struct RefreshedToken {
 pub struct TokenMap<G: TagGrant = Box<dyn TagGrant + Send + Sync + 'static>> {
     duration: Option<Duration>,
     generator: G,
-    usage: u64,
-    access: HashMap<Arc<str>, Arc<Token>>,
-    refresh: HashMap<Arc<str>, Arc<Token>>,
+    _usage: u64,
+    _access: HashMap<Arc<str>, Arc<Token>>,
+    _refresh: HashMap<Arc<str>, Arc<Token>>,
     redis: Arc<ClusterClient>
     // register: Arc<Registrar>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 struct Token {
     /// Back link to the access token.
     // access: Arc<str>,
@@ -130,9 +128,9 @@ impl<G: TagGrant> TokenMap<G> {
         Self {
             duration: None,
             generator,
-            usage: 0,
-            access: HashMap::new(),
-            refresh: HashMap::new(),
+            _usage: 0,
+            _access: HashMap::new(),
+            _refresh: HashMap::new(),
             redis
         }
     }
@@ -154,8 +152,8 @@ impl<G: TagGrant> TokenMap<G> {
     /// naturally. There is no differentiation between access and refresh tokens since these should
     /// have a marginal probability of colliding.
     pub fn revoke(&mut self, token: &str) {
-        self.access.remove(token);
-        self.refresh.remove(token);
+        self._access.remove(token);
+        self._refresh.remove(token);
     }
 
     /// Directly associate token with grant.
@@ -163,36 +161,21 @@ impl<G: TagGrant> TokenMap<G> {
     /// No checks on the validity of the grant are performed but the expiration time of the grant
     /// is modified (if a `duration` was previously set).
     pub fn import_grant(&mut self, token: String, mut grant: Grant) {
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return
-            }
-        };
+                ()
+            }).unwrap();
 
         self.set_duration(&mut grant);
-        // let key: Arc<str> = Arc::from(token);
+
         let _token = Token::from_access(token.clone(), grant);
-        let token_str = match serde_json::to_string(&_token) {
-            Ok(str) => str,
-            Err(err) => {
-                error!("serde token error: {}", err.to_string());
-                return
-            }
-        };
-        match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", token.clone(), token_str) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set tokenmap_access error");
-                return
-            }
-            Err(err) => {
-                error!("set tokenmap_access error: {}", err.to_string());
-                return
-            }
-        }
-        // self.access.insert(key, Arc::new(token));
+
+        let key = format!("oauth2:token_map:access:{}", &token);
+
+        let _ = super::set_grant(&mut connection, key.as_str(), &_token.grant, 86400);
+
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "access", _token.access);
     }
 
     fn set_duration(&self, grant: &mut Grant) {
@@ -279,15 +262,12 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         // set your system time forward/backward ~10billion seconds, assuming ~10^9 operations per
         // second.
 
-        // let next_usage = self.usage.wrapping_add(2);
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        let curr_usage = match connection.get::<_, u64>("oauth2:tokenmap_usage") {
+                ()
+            })?;
+        let curr_usage = match connection.get::<_, u64>("oauth2:token_map:usage") {
             Ok(u) => u,
             Err(err) => {
                 error!("get usage error: {}, generate it to 0", err.to_string());
@@ -297,8 +277,6 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         let next_usage = curr_usage.wrapping_add(2);
 
         let (access, refresh) = {
-            // let access = self.generator.tag(self.usage, &grant)?;
-            // let refresh = self.generator.tag(self.usage.wrapping_add(1), &grant)?;
             let access = self.generator.tag(curr_usage, &grant)?;
             let refresh = self.generator.tag(curr_usage.wrapping_add(1), &grant)?;
             debug_assert!(
@@ -313,45 +291,32 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
         };
 
         let until = grant.until;
-        // let access_key: Arc<str> = Arc::from(access.clone());
-        // let refresh_key: Arc<str> = Arc::from(refresh.clone());
         let token = Token::from_refresh(access.clone(), refresh.clone(), grant);
-        // let token = Arc::new(token);
 
-        // self.access.insert(access_key, token.clone());
-        // self.refresh.insert(refresh_key, token);
-        // self.usage = next_usage;
+        // 设置token map access
+        let key = format!("oauth2:token_map:access:{}", &access);
+        super::set_grant(&mut connection, key.as_str(), &token.grant, 86400)?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "access", access.clone())
+            .map_err(|err| {
+                error!("h_set access error {}", err);
+                ()
+            })?;
 
-        let token_str = match serde_json::to_string(&token) {
-            Ok(str) => str,
-            Err(err) => {
-                error!("serde token error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", access.clone(), token_str.clone()) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set access error");
-                return Err(())
-            }
-            Err(err) => {
-                error!("set access error: {}", err.to_string());
-                return Err(())
-            }
-        }
-        match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_refresh", refresh.clone(), token_str) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set refresh error");
-                return Err(())
-            }
-            Err(err) => {
-                error!("set refresh error: {}", err.to_string());
-                return Err(())
-            }
-        }
-        match connection.set::<_, u64, String>("oauth2:tokenmap_usage", next_usage) {
+        // 设置token map refresh
+        let key = format!("oauth2:token_map:refresh:{}", &refresh);
+        super::set_grant(&mut connection, key.as_str(), &token.grant, 86400 * 7)?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "access", access.clone())
+            .map_err(|err| {
+                error!("h_set access error {}", err);
+                ()
+            })?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "refresh", refresh.clone())
+            .map_err(|err| {
+                error!("h_set refresh error {}", err);
+                ()
+            })?;
+
+        match connection.set::<_, u64, String>("oauth2:token_map:usage", next_usage) {
             Ok(str) => {
                 if str.ne("OK") {
                     error!("set usage error");
@@ -372,142 +337,96 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
     }
 
     fn refresh(&mut self, refresh: &str, mut grant: Grant) -> Result<RefreshedToken, ()> {
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
-            }
-        };
+                ()
+            })?;
 
-        // Remove the old token.
-        // let (refresh_key, mut token) = self
-        //     .refresh
-        //     .remove_entry(refresh)
-        //     .ok_or(())?;// Should only be called on valid refresh tokens.
+        // 获取token对象
+        let key = format!("oauth2:token_map:refresh:{}", refresh);
+        let redis_grant = super::get_grant(&mut connection, key.as_str())?.unwrap();
+        let redis_access = connection.hget::<&str, &str, String>(key.as_str(), "access")
+            .map_err(|err| {
+                error!("get access error: {}", err);
+                ()
+            })?;
+        let redis_refresh = connection.hget::<&str, &str, String>(key.as_str(), "refresh")
+            .map_err(|err| {
+                error!("get access error: {}", err);
+                ()
+            })?;
+        let mut token = Token::from_refresh(redis_access, redis_refresh, redis_grant);
+        let refresh_key = refresh.to_owned();
 
-        let (refresh_key, mut token) = match connection.hget::<&str, String, String>("oauth2:tokenmap_refresh", refresh.to_string()) {
-            Ok(str) => {
-                let token = match serde_json::from_str::<Token>(str.as_str()) {
-                    Ok(t) => t,
-                    Err(err) => {
-                        error!("deserde token error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                match connection.hdel::<_, _, usize>("oauth2:tokenmap_refresh", refresh.to_string()) {
-                    Ok(1) => (),
-                    Ok(_) => {
-                        error!("del refresh error");
-                        return Err(())
-                    }
-                    Err(err) => {
-                        error!("del refresh error: {}", err.to_string());
-                        return Err(())
-                    }
-                }
-                (refresh.to_string(), token)
-            }
-            Err(err) => {
-                error!("get refresh error: {}", err.to_string());
-                return Err(())
-            }
-        };
+        // 删除旧token
+        let _ = connection.del(key.as_str())
+            .map_err(|err| {
+                error!("del refresh error: {}", err);
+                ()
+            })?;
 
         // assert!(Arc::ptr_eq(token.refresh.as_ref().unwrap(), &refresh_key));
         assert!(refresh_key.eq(&token.refresh.clone().unwrap()));
         self.set_duration(&mut grant);
         let until = grant.until;
 
-        let curr_usage = match connection.get::<_, u64>("oauth2:tokenmap_usage") {
+        let curr_usage = match connection.get::<_, u64>("oauth2:token_map:usage") {
             Ok(u) => u,
             Err(err) => {
                 error!("get usage error: {}", err.to_string());
                 return Err(())
             }
         };
-        // let next_usage = self.usage.wrapping_add(1);
+
         let next_usage = curr_usage.wrapping_add(1);
-        // let new_access = self.generator.tag(self.usage, &grant)?;
+
         let new_access = self.generator.tag(curr_usage, &grant)?;
-        // let new_key: Arc<str> = Arc::from(new_access.clone());
-        let new_key = new_access.clone();
 
-        // if let Some(atoken) = self.access.remove(&token.access) {
-        //     assert!(Arc::ptr_eq(&token, &atoken));
-        // }
-        match connection.hget::<&str, String, String>("oauth2:tokenmap_access", token.access.clone()) {
-            Ok(str) => {
-                let _token = match serde_json::from_str::<Token>(str.as_str()) {
-                    Ok(t) => t,
-                    Err(err) => {
-                        error!("deserde token error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                match connection.hdel::<_, _, usize>("oauth2:tokenmap_access", token.access.clone()) {
-                    Ok(1) => (),
-                    Ok(_) => {
-                        error!("del access error");
-                        return Err(())
-                    }
-                    Err(err) => {
-                        error!("del access error: {}", err.to_string());
-                        return Err(())
-                    }
-                }
-                assert!(token.access.eq(&_token.access));
-            }
-            Err(err) => {
-                error!("remove access error: {}", err.to_string());
-                return Err(())
-            }
-        }
+        // 对比新旧access并删除缓存,这里有点多余,除非存的时候出错,不然肯定是匹配的
+        let key = format!("oauth2:token_map:access:{}", &token.access);
+        let redis_access = connection.hget::<&str, &str, String>(key.as_str(), "access")
+            .map_err(|err| {
+                error!("get access error: {}", err);
+                ()
+            })?;
+        assert!(token.access.eq(&redis_access));
+        let _ = connection.del(key.as_str())
+            .map_err(|err| {
+                error!("del access error: {}", err);
+                ()
+            })?;
 
-        // {
-        //     // Should now be the only `Arc` pointing to this.
-        //     let mut_token = Arc::get_mut(&mut token)
-        //         .unwrap_or_else(|| unreachable!("Grant data was only shared with access and refresh"));
-        //     // Remove the old access token, insert the new.
-        //     mut_token.access = new_key.clone();
-        //     mut_token.grant = grant;
-        // }
-        token.access = new_key.clone();
+        token.access = new_access.clone();
         token.grant = grant;
 
         // self.access.insert(new_key, token.clone());
         // self.refresh.insert(refresh_key, token);
         // self.usage = next_usage;
-        let token_str = match serde_json::to_string(&token) {
-            Ok(str) => str,
-            Err(err) => {
-                error!("serde token error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_access", new_key, token_str.clone()) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set access error");
-                return Err(())
-            }
-            Err(err) => {
-                error!("set access error: {}", err.to_string());
-                return Err(())
-            }
-        }
-        match connection.hset::<&str, String, String, usize>("oauth2:tokenmap_refresh", refresh_key, token_str) {
-            Ok(1) => (),
-            Ok(_) => {
-                error!("set refresh error");
-                return Err(())
-            }
-            Err(err) => {
-                error!("set refresh error: {}", err.to_string());
-                return Err(())
-            }
-        }
-        match connection.set::<_, u64, String>("oauth2:tokenmap_usage", next_usage) {
+        // 重新设置token map access
+        let key = format!("oauth2:token_map:access:{}", &new_access);
+        super::set_grant(&mut connection, key.as_str(), &token.grant, 86400)?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "access", new_access.clone())
+            .map_err(|err| {
+                error!("h_set access error {}", err);
+                ()
+            })?;
+
+        // 重新设置token map refresh
+        let key = format!("oauth2:token_map:refresh:{}", refresh);
+        super::set_grant(&mut connection, key.as_str(), &token.grant, 86400 * 7)?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "access", new_access.clone())
+            .map_err(|err| {
+                error!("h_set access error {}", err);
+                ()
+            })?;
+        let _ = connection.hset::<&str, &str, String, usize>(key.as_str(), "refresh", refresh_key.clone())
+            .map_err(|err| {
+                error!("h_set refresh error {}", err);
+                ()
+            })?;
+
+        match connection.set::<_, u64, String>("oauth2:token_map:usage", next_usage) {
             Ok(str) => {
                 if str.ne("OK") {
                     error!("set usage error");
@@ -528,53 +447,25 @@ impl<G: TagGrant> Issuer for TokenMap<G> {
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        let grant = match connection.hget::<&str, String, String>("oauth2:tokenmap_access", token.to_string()) {
-            Ok(str) => {
-                let _token = match serde_json::from_str::<Token>(str.as_str()) {
-                    Ok(t) => t,
-                    Err(err) => {
-                        error!("deserde token error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                Some(_token.grant)
-            }
-            _ => None
-        };
-        Ok(grant)
-        // Ok(self.access.get(token).map(|token| token.grant.clone()))
+                ()
+            })?;
+        let key = format!("oauth2:token_map:access:{}", &token);
+
+        super::get_grant(&mut connection, key.as_str())
     }
 
     fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
-        let mut connection = match self.redis.get_connection() {
-            Ok(c) => c,
-            Err(err) => {
+        let mut connection = self.redis.get_connection()
+            .map_err(|err| {
                 error!("get connection error: {}", err.to_string());
-                return Err(())
-            }
-        };
-        let grant = match connection.hget::<&str, String, String>("oauth2:tokenmap_refresh", token.to_string()) {
-            Ok(str) => {
-                let _token = match serde_json::from_str::<Token>(str.as_str()) {
-                    Ok(t) => t,
-                    Err(err) => {
-                        error!("deserde token error: {}", err.to_string());
-                        return Err(())
-                    }
-                };
-                Some(_token.grant)
-            }
-            _ => None
-        };
-        Ok(grant)
-        // Ok(self.refresh.get(token).map(|token| token.grant.clone()))
+                ()
+            })?;
+        let key = format!("oauth2:token_map:refresh:{}", &token);
+
+        super::get_grant(&mut connection, key.as_str())
     }
 }
 
@@ -809,6 +700,7 @@ pub mod tests {
     use crate::primitives::grant::Extensions;
     use crate::primitives::generator::RandomGenerator;
     use chrono::{Duration, Utc};
+    use redis::cluster::ClusterClientBuilder;
 
     fn grant_template() -> Grant {
         Grant {
